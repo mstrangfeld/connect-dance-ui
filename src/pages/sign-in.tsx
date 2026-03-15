@@ -13,7 +13,7 @@ export function SignInPage() {
   const handleSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault()
     login()
-    navigate("/feed")
+    navigate("/")
   }
 
   return (
