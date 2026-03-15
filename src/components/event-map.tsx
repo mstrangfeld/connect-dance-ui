@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react"
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet"
+import { useNavigate } from "react-router"
 import L from "leaflet"
 import type { DanceEvent } from "@/data/mock-events"
 import { EVENT_TYPE_LABELS } from "@/data/mock-events"
@@ -93,6 +94,7 @@ export function EventMap({
   activeEventId,
   onEventSelect,
 }: EventMapProps) {
+  const navigate = useNavigate()
   const defaultCenter: [number, number] = [45, -20]
   const center = searchCenter ?? defaultCenter
   const zoom = searchCenter ? radiusToZoom(radiusKm) : 3
@@ -152,9 +154,14 @@ export function EventMap({
               <div className="mt-1 text-[11px] text-slate-500">
                 {event.venue} · {formatDateShort(event.date)}
               </div>
-              <div className="mt-1 flex items-center justify-between">
+              <div className="mt-1.5 flex items-center justify-between">
                 <span className="text-[11px] text-slate-600">{event.attendees} going</span>
-                <span className="text-[12px] font-semibold text-slate-700">{event.price}</span>
+                <button
+                  onClick={() => navigate(`/events/${event.id}`)}
+                  className="text-[11px] font-medium text-[#5A9CB5] hover:underline"
+                >
+                  View event →
+                </button>
               </div>
             </div>
           </Popup>
