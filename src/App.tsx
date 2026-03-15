@@ -47,7 +47,7 @@ function AuthRoutes() {
 export function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/connect-dance-ui">
         <AuthRoutes />
       </BrowserRouter>
     </AuthProvider>
