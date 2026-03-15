@@ -34,10 +34,6 @@ export function Hero({ activeTypes, onActiveTypesChange }: HeroProps) {
     }
   }
 
-  function handleClear() {
-    onActiveTypesChange(new Set())
-  }
-
   return (
     <section>
       <div className="mx-auto max-w-3xl px-6 py-10 text-center sm:py-12">
