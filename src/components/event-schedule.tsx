@@ -35,7 +35,7 @@ function formatTime(time: string): string {
 }
 
 function getDuration(start: string, end: string): string {
-  let diff = parseMinutes(end) - parseMinutes(start)
+  const diff = parseMinutes(end) - parseMinutes(start)
   if (diff <= 0) return ""
   const hrs = Math.floor(diff / 60)
   const mins = diff % 60

@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from "react-router"
+import { useEffect } from "react"
+import { BrowserRouter, Routes, Route, useLocation } from "react-router"
 import { Nav, MobileBottomNav } from "@/components/nav"
 import { HomePage } from "@/pages/home"
 import { EventsPage } from "@/pages/events"
@@ -11,11 +12,20 @@ import { MyEventsPage } from "@/pages/my-events"
 import { AccountPage } from "@/pages/account"
 import { AuthProvider } from "@/context/auth"
 
-function AuthRoutes() {
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
+
+function AppLayout() {
   return (
-    <div className="flex h-svh flex-col">
+    <>
+      <ScrollToTop />
       <Nav />
-      <div className="md:mt-14 flex min-h-0 flex-1 flex-col overflow-y-auto pb-16 md:pb-0">
+      <main className="min-h-svh pt-0 pb-16 md:pt-14 md:pb-0">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/events" element={<EventsPage />} />
@@ -27,9 +37,9 @@ function AuthRoutes() {
           <Route path="/my-events" element={<MyEventsPage />} />
           <Route path="/account" element={<AccountPage />} />
         </Routes>
-      </div>
+      </main>
       <MobileBottomNav />
-    </div>
+    </>
   )
 }
 
@@ -37,7 +47,7 @@ export function App() {
   return (
     <AuthProvider>
       <BrowserRouter basename="/connect-dance-ui">
-        <AuthRoutes />
+        <AppLayout />
       </BrowserRouter>
     </AuthProvider>
   )

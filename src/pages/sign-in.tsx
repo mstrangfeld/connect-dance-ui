@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { LogoIcon } from "@/components/icons"
 import { useAuth } from "@/context/auth"
 
 export function SignInPage() {
@@ -21,12 +22,7 @@ export function SignInPage() {
       <div className="w-full max-w-sm">
         <div className="text-center">
           <Link to="/" className="inline-flex items-center gap-2">
-            <svg viewBox="0 0 28 28" fill="none" className="size-7">
-              <circle cx="14" cy="14" r="13" stroke="currentColor" strokeWidth="1.5" className="text-slate-400" />
-              <path d="M9 14c0-2.76 2.24-5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-primary" />
-              <path d="M19 14c0 2.76-2.24 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-primary" />
-              <circle cx="14" cy="14" r="1.5" fill="currentColor" className="text-primary" />
-            </svg>
+            <LogoIcon className="size-7" />
           </Link>
           <h1 className="mt-4 text-xl font-bold tracking-tight">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">

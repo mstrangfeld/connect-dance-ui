@@ -1,222 +1,203 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect } from "react"
 import { EventsSection } from "@/components/events-section"
 import { EventMap } from "@/components/event-map"
 import { EventCard } from "@/components/event-card"
 import { MobileEventsFilterPill } from "@/components/mobile-events-filter-pill"
-import { MOCK_EVENTS } from "@/data/mock-events"
-import type { EventType } from "@/data/mock-events"
-import type { DateRange } from "react-day-picker"
+import { useEventFilters } from "@/hooks/use-event-filters"
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const PILL_AREA_HEIGHT = 68 // search pill height + margin (px)
-const NAV_HEIGHT = 64 // bottom nav height (px)
-const PEEK_HEIGHT = 120 // how much of the listings panel peeks above the bottom nav
+const PILL_AREA_HEIGHT = 68
+const NAV_HEIGHT = 64
+const PEEK_HEIGHT = 120
 
-// Haversine distance in km
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLon = ((lon2 - lon1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2)
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+// CartoDB light tile background — used for status bar blending on iOS
+const MAP_THEME_COLOR = "#e8e0d8"
+const DEFAULT_THEME_COLOR = "#f9f9f8"
 
 // ---------------------------------------------------------------------------
 // Mobile map + scrollable listings (Airbnb-style architecture)
 //
-// Layout layers:
-//   z-10  Fixed map — full viewport, interactive
-//   z-20  Scroll container (pointer-events: none) with listings (pointer-events: auto)
-//   z-45  Search pill + animated backdrop — fixed at top
-//   z-50  Bottom nav (rendered by App)
+// Uses native document scroll — enables Safari toolbar auto-hide on iOS.
 //
-// The scroll container has pointer-events: none so the map stays interactive
-// through the transparent spacer. Only the listings panel captures touches.
+// Layer stacking:
+//   z  5  Spacer — below map, so map receives touch events
+//   z 10  Fixed map — interactive
+//   z 20  Listings panel — above map, scrolls over it
+//   z 45  Search pill — fixed at top
+//   z 50  Bottom nav (rendered by App)
 // ---------------------------------------------------------------------------
 
 function MobileEventsView() {
-  const [locationQuery, setLocationQuery] = useState("")
-  const [activeLocation, setActiveLocation] = useState("")
-  const [searchCenter, setSearchCenter] = useState<[number, number] | undefined>(undefined)
-  const [radius, setRadius] = useState(200)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
-  const [activeTypes, setActiveTypes] = useState<Set<EventType>>(new Set())
+  const { filters, actions, filtered } = useEventFilters()
   const [activeEventId, setActiveEventId] = useState<string | undefined>()
 
-  // Scroll tracking for search bar backdrop animation
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const backdropRef = useRef<HTMLDivElement>(null)
-  const spacerHeight = useRef(0)
-
-  const filtered = useMemo(() => {
-    return MOCK_EVENTS.filter((e) => {
-      if (activeTypes.size > 0 && !e.categories.some((c) => activeTypes.has(c))) return false
-      if (activeLocation && searchCenter) {
-        const dist = haversine(searchCenter[0], searchCenter[1], e.lat, e.lng)
-        if (dist > radius) return false
-      }
-      if (dateRange?.from) {
-        const eventDate = new Date(e.date + "T00:00:00")
-        const from = new Date(dateRange.from); from.setHours(0, 0, 0, 0)
-        const to = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from)
-        to.setHours(23, 59, 59, 999)
-        if (eventDate < from || eventDate > to) return false
-      }
-      return true
-    })
-  }, [activeTypes, activeLocation, searchCenter, radius, dateRange])
-
-  // Measure spacer height once on mount/resize
+  // Set theme-color to map tile bg so iOS status bar blends with the map
   useEffect(() => {
-    const measure = () => {
-      spacerHeight.current = window.innerHeight - PILL_AREA_HEIGHT - NAV_HEIGHT - PEEK_HEIGHT
+    const meta = document.getElementById("theme-color") as HTMLMetaElement | null
+    if (meta) meta.content = MAP_THEME_COLOR
+    return () => {
+      if (meta) meta.content = DEFAULT_THEME_COLOR
     }
-    measure()
-    window.addEventListener("resize", measure)
-    return () => window.removeEventListener("resize", measure)
   }, [])
 
-  // Animate backdrop opacity based on scroll position
-  const onScroll = useCallback(() => {
-    const el = scrollRef.current
-    const bd = backdropRef.current
-    if (!el || !bd) return
+  // Scroll tracking for search bar backdrop animation + bottom floor
+  const backdropRef = useRef<HTMLDivElement>(null)
+  const floorRef = useRef<HTMLDivElement>(null)
+  const spacerHeightVal = useRef(0)
 
-    // The listings top edge hits the search pill when scrollTop ≈ spacerHeight - PILL_AREA_HEIGHT
-    const threshold = spacerHeight.current - PILL_AREA_HEIGHT
-    // Start fading in 60px before the listings reach the pill
-    const fadeStart = threshold - 60
-    const progress = Math.max(0, Math.min(1, (el.scrollTop - fadeStart) / 60))
-    bd.style.opacity = String(progress)
+  // Measure spacer height once on mount using the initial viewport.
+  // We intentionally do NOT re-measure on resize to avoid layout jumps
+  // when Safari's toolbar appears/disappears.
+  const initialHeight = useRef(0)
+  useEffect(() => {
+    initialHeight.current = window.innerHeight
+    spacerHeightVal.current =
+      window.innerHeight - PILL_AREA_HEIGHT - NAV_HEIGHT - PEEK_HEIGHT
   }, [])
 
-  function toggleType(type: EventType) {
-    setActiveTypes((prev) => {
-      const next = new Set(prev)
-      if (next.has(type)) next.delete(type)
-      else next.add(type)
-      return next
-    })
-  }
+  // Listen to window scroll (native body scroll)
+  useEffect(() => {
+    const onScroll = () => {
+      const bd = backdropRef.current
+      const floor = floorRef.current
+      if (!bd) return
+      const threshold = spacerHeightVal.current - PILL_AREA_HEIGHT
+      const fadeStart = threshold - 60
+      const progress = Math.max(
+        0,
+        Math.min(1, (window.scrollY - fadeStart) / 60),
+      )
+      bd.style.opacity = String(progress)
 
-  function clearAll() {
-    setLocationQuery("")
-    setActiveLocation("")
-    setSearchCenter(undefined)
-    setDateRange(undefined)
-    setActiveTypes(new Set())
-  }
+      // Show the fixed floor only once the listings panel fully covers
+      // the viewport, so overscroll bounce at the bottom never reveals
+      // the map. The spacer height equals the distance from the top of
+      // the page to where the listings panel starts, so once scrollY
+      // exceeds it the panel is at the top of the screen.
+      if (floor) {
+        floor.style.visibility =
+          window.scrollY >= spacerHeightVal.current ? "visible" : "hidden"
+      }
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
 
   return (
     <>
-      {/* ── 1. Map layer — fixed, fully interactive ── */}
-      <div className="fixed inset-0 md:hidden" style={{ zIndex: 10 }}>
+      {/* 0. Fixed floor — solid background between map and listings.
+            Starts hidden; becomes visible once the listings cover the map.
+            Prevents the map from showing through during overscroll bounce. */}
+      <div
+        ref={floorRef}
+        className="fixed inset-0 bg-background md:hidden"
+        style={{ zIndex: 15, visibility: "hidden" }}
+      />
+
+      {/* 1. Map layer — fixed, fully interactive.
+            Uses lvh so Leaflet doesn't re-layout when Safari's toolbar
+            appears/disappears (which would cause the map to jump). */}
+      <div className="fixed top-0 left-0 w-full md:hidden" style={{ zIndex: 10, height: "100lvh" }}>
         <EventMap
           events={filtered}
-          radiusKm={radius}
-          searchCenter={searchCenter}
+          radiusKm={filters.radius}
+          searchCenter={filters.searchCenter}
           activeEventId={activeEventId}
           onEventSelect={setActiveEventId}
         />
       </div>
 
-      {/* ── 2. Scroll container — pointer-events:none so map stays interactive ── */}
+      {/* 2. Spacer — below map (z:5 < z:10) so map gets touch events.
+            Uses lvh (large viewport height) so the spacer doesn't resize
+            when Safari's toolbar appears/disappears during scrolling. */}
       <div
-        ref={scrollRef}
-        onScroll={onScroll}
-        className="relative flex-1 overflow-y-auto pointer-events-none md:hidden"
-        style={{ zIndex: 20, WebkitOverflowScrolling: "touch" }}
+        className="relative shrink-0 md:hidden"
+        style={{
+          zIndex: 5,
+          height: `calc(100lvh - ${PILL_AREA_HEIGHT}px - ${NAV_HEIGHT}px - ${PEEK_HEIGHT}px)`,
+        }}
+        aria-hidden
+      />
+
+      {/* 3. Listings panel — above map (z:20 > z:10), scrolls over it */}
+      <div
+        className="relative rounded-t-2xl bg-background shadow-[0_-4px_24px_rgba(0,0,0,0.08)] md:hidden"
+        style={{ zIndex: 20 }}
       >
-        {/* Transparent spacer — map shows through, touches pass to map */}
-        <div
-          style={{ height: `calc(100svh - ${PILL_AREA_HEIGHT}px - ${NAV_HEIGHT}px - ${PEEK_HEIGHT}px)` }}
-          aria-hidden
-        />
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-border" />
+        </div>
 
-        {/* Listings panel — opaque, receives pointer events */}
-        <div className="pointer-events-auto relative rounded-t-2xl bg-background shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
-          {/* Drag handle (decorative) */}
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="h-1 w-10 rounded-full bg-border" />
-          </div>
+        <div className="flex items-center justify-between px-4 py-2">
+          <p className="text-[13px] font-semibold">
+            {filtered.length} event{filtered.length !== 1 ? "s" : ""}
+          </p>
+        </div>
 
-          {/* Count row */}
-          <div className="flex items-center justify-between px-4 py-2">
-            <p className="text-[13px] font-semibold">
-              {filtered.length} event{filtered.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-
-          {/* Event list */}
-          <div className="px-4 pb-6">
-            {filtered.length === 0 ? (
-              <div className="py-16 text-center">
-                <p className="text-sm text-muted-foreground">No events match your filters.</p>
-                <button
-                  onClick={clearAll}
-                  className="mt-3 text-[13px] font-medium text-primary"
+        <div className="px-4 pb-6">
+          {filtered.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm text-muted-foreground">
+                No events match your filters.
+              </p>
+              <button
+                onClick={actions.clearAll}
+                className="mt-3 text-[13px] font-medium text-primary"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((event) => (
+                <div
+                  key={event.id}
+                  onClick={() => setActiveEventId(event.id)}
+                  className={`transition-all ${activeEventId === event.id ? "ring-2 ring-primary rounded-xl" : ""}`}
                 >
-                  Clear filters
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {filtered.map((event) => (
-                  <div
-                    key={event.id}
-                    onClick={() => setActiveEventId(event.id)}
-                    className={`transition-all ${activeEventId === event.id ? "ring-2 ring-primary rounded-xl" : ""}`}
-                  >
-                    <EventCard event={event} isActive={activeEventId === event.id} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <EventCard
+                    event={event}
+                    isActive={activeEventId === event.id}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── 3. Search pill + animated backdrop ── */}
-      <div className="fixed top-0 left-0 right-0 pointer-events-none md:hidden" style={{ zIndex: 45 }}>
-        {/* Backdrop — fades in as listings approach the search bar */}
+      {/* 4. Search pill + animated backdrop */}
+      <div
+        className="fixed top-0 left-0 right-0 pointer-events-none md:hidden"
+        style={{ zIndex: 45 }}
+      >
         <div
           ref={backdropRef}
           className="absolute inset-0 bg-background/95 backdrop-blur-md"
-          style={{ opacity: 0, height: PILL_AREA_HEIGHT, transition: "opacity 0.15s ease-out" }}
+          style={{
+            opacity: 0,
+            height: PILL_AREA_HEIGHT,
+            transition: "opacity 0.15s ease-out",
+          }}
         />
         <div className="relative mx-4 mt-3 pointer-events-auto">
           <MobileEventsFilterPill
-            locationQuery={locationQuery}
-            onLocationQueryChange={(q) => {
-              setLocationQuery(q)
-              if (!q.trim()) { setActiveLocation(""); setSearchCenter(undefined) }
-            }}
-            activeLocation={activeLocation}
-            onLocationSelect={(city) => {
-              setLocationQuery(city.name)
-              setActiveLocation(city.name)
-              setSearchCenter([city.lat, city.lng])
-            }}
-            onLocationClear={() => {
-              setLocationQuery("")
-              setActiveLocation("")
-              setSearchCenter(undefined)
-            }}
-            radius={radius}
-            onRadiusChange={setRadius}
-            dateRange={dateRange}
-            onDateRangeChange={setDateRange}
-            activeTypes={activeTypes}
-            onTypeToggle={toggleType}
-            onClearAll={clearAll}
+            locationQuery={filters.locationQuery}
+            onLocationQueryChange={actions.setLocationQuery}
+            activeLocation={filters.activeLocation}
+            onLocationSelect={actions.selectLocation}
+            onLocationClear={actions.clearLocation}
+            radius={filters.radius}
+            onRadiusChange={actions.setRadius}
+            dateRange={filters.dateRange}
+            onDateRangeChange={actions.setDateRange}
+            activeTypes={filters.activeTypes}
+            onTypeToggle={actions.toggleType}
+            onClearAll={actions.clearAll}
             resultCount={filtered.length}
           />
         </div>

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router"
 import L from "leaflet"
 import type { DanceEvent } from "@/data/mock-events"
 import { EVENT_TYPE_LABELS } from "@/data/mock-events"
+import { TYPE_COLORS, formatDateShort } from "@/lib/events"
 
 // Fix default marker icon issue with bundlers
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,16 +15,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 })
 
-const TYPE_COLORS: Record<string, string> = {
-  party:     "#a78bfa",  // violet-400
-  intensive: "#fb923c",  // orange-400
-  workshop:  "#facc15",  // yellow-400
-  class:     "#34d399",  // emerald-400
-  festival:  "#38bdf8",  // sky-400
-}
-
 function createEventIcon(type: string, isActive: boolean) {
-  const color = TYPE_COLORS[type] ?? "#5A9CB5"
+  const color = TYPE_COLORS[type as keyof typeof TYPE_COLORS] ?? "#5A9CB5"
   const size = isActive ? 32 : 24
   const label = EVENT_TYPE_LABELS[type as keyof typeof EVENT_TYPE_LABELS] ?? ""
   const letter = label.charAt(0)
@@ -45,13 +38,7 @@ function createEventIcon(type: string, isActive: boolean) {
   })
 }
 
-function MapUpdater({
-  center,
-  zoom,
-}: {
-  center: [number, number]
-  zoom: number
-}) {
+function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap()
   const prevCenter = useRef(center)
   const prevZoom = useRef(zoom)
@@ -117,7 +104,10 @@ export function EventMap({
       zoomControl={false}
       attributionControl={false}
       minZoom={2}
-      maxBounds={[[-85, -180], [85, 180]]}
+      maxBounds={[
+        [-85, -180],
+        [85, 180],
+      ]}
       maxBoundsViscosity={1.0}
     >
       <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
@@ -158,7 +148,9 @@ export function EventMap({
                 {event.venue} · {formatDateShort(event.date)}
               </div>
               <div className="mt-1.5 flex items-center justify-between">
-                <span className="text-[11px] text-slate-600">{event.attendees} going</span>
+                <span className="text-[11px] text-slate-600">
+                  {event.attendees} going
+                </span>
                 <button
                   onClick={() => navigate(`/events/${event.id}`)}
                   className="text-[11px] font-medium text-[#5A9CB5] hover:underline"
@@ -172,9 +164,4 @@ export function EventMap({
       ))}
     </MapContainer>
   )
-}
-
-function formatDateShort(dateStr: string) {
-  const date = new Date(dateStr + "T00:00:00")
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }

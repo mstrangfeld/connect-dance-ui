@@ -154,7 +154,6 @@ function AddOnInfoCard({ addOn }: { addOn: TicketAddOn }) {
 
 export function EventTickets({
   eventId,
-  eventTitle: _eventTitle,
 }: {
   eventId: string
   eventTitle: string
