@@ -25,6 +25,7 @@ const DEFAULT_THEME_COLOR = "#f9f9f8"
 // Layer stacking:
 //   z  5  Spacer — below map, so map receives touch events
 //   z 10  Fixed map — interactive
+//   z 15  Floor — fixed to bottom, top tracks panel midpoint
 //   z 20  Listings panel — above map, scrolls over it
 //   z 45  Search pill — fixed at top
 //   z 50  Bottom nav (rendered by App)
@@ -43,17 +44,16 @@ function MobileEventsView() {
     }
   }, [])
 
-  // Scroll tracking for search bar backdrop animation + bottom floor
+  // Scroll tracking for search bar backdrop animation + floor positioning
   const backdropRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const floorRef = useRef<HTMLDivElement>(null)
   const spacerHeightVal = useRef(0)
 
   // Measure spacer height once on mount using the initial viewport.
   // We intentionally do NOT re-measure on resize to avoid layout jumps
   // when Safari's toolbar appears/disappears.
-  const initialHeight = useRef(0)
   useEffect(() => {
-    initialHeight.current = window.innerHeight
     spacerHeightVal.current =
       window.innerHeight - PILL_AREA_HEIGHT - NAV_HEIGHT - PEEK_HEIGHT
   }, [])
@@ -62,7 +62,6 @@ function MobileEventsView() {
   useEffect(() => {
     const onScroll = () => {
       const bd = backdropRef.current
-      const floor = floorRef.current
       if (!bd) return
       const threshold = spacerHeightVal.current - PILL_AREA_HEIGHT
       const fadeStart = threshold - 60
@@ -72,35 +71,27 @@ function MobileEventsView() {
       )
       bd.style.opacity = String(progress)
 
-      // Show the fixed floor only once the listings panel fully covers
-      // the viewport, so overscroll bounce at the bottom never reveals
-      // the map. The spacer height equals the distance from the top of
-      // the page to where the listings panel starts, so once scrollY
-      // exceeds it the panel is at the top of the screen.
-      if (floor) {
-        floor.style.visibility =
-          window.scrollY >= spacerHeightVal.current ? "visible" : "hidden"
+      // Position the floor's top edge at the midpoint of the panel.
+      // The floor is fixed to the bottom, sits between the map (z:10)
+      // and the panel (z:20), covering the map below the panel.
+      const panel = panelRef.current
+      const floor = floorRef.current
+      if (panel && floor) {
+        const rect = panel.getBoundingClientRect()
+        const mid = rect.top + rect.height / 2
+        floor.style.top = `${Math.max(0, mid)}px`
       }
     }
 
     window.addEventListener("scroll", onScroll, { passive: true })
+    onScroll() // initial position
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
+
   return (
     <>
-      {/* 0. Fixed floor — solid background between map and listings.
-            Starts hidden; becomes visible once the listings cover the map.
-            Prevents the map from showing through during overscroll bounce. */}
-      <div
-        ref={floorRef}
-        className="fixed inset-0 bg-background md:hidden"
-        style={{ zIndex: 15, visibility: "hidden" }}
-      />
-
-      {/* 1. Map layer — fixed, fully interactive.
-            Uses lvh so Leaflet doesn't re-layout when Safari's toolbar
-            appears/disappears (which would cause the map to jump). */}
+      {/* 1. Map layer — fixed, fully interactive */}
       <div className="fixed top-0 left-0 w-full md:hidden" style={{ zIndex: 10, height: "100lvh" }}>
         <EventMap
           events={filtered}
@@ -111,9 +102,7 @@ function MobileEventsView() {
         />
       </div>
 
-      {/* 2. Spacer — below map (z:5 < z:10) so map gets touch events.
-            Uses lvh (large viewport height) so the spacer doesn't resize
-            when Safari's toolbar appears/disappears during scrolling. */}
+      {/* Spacer — below map so map gets touch events */}
       <div
         className="relative shrink-0 md:hidden"
         style={{
@@ -123,8 +112,18 @@ function MobileEventsView() {
         aria-hidden
       />
 
-      {/* 3. Listings panel — above map (z:20 > z:10), scrolls over it */}
+      {/* Floor — fixed to viewport bottom, z:15 sits between map and
+          panel. Its top edge tracks the panel's midpoint so it covers
+          the map below the panel without affecting scroll. */}
       <div
+        ref={floorRef}
+        className="fixed bottom-0 left-0 right-0 bg-background md:hidden"
+        style={{ zIndex: 15 }}
+      />
+
+      {/* 2. Listings panel — above map (z:20 > z:10), scrolls over it */}
+      <div
+        ref={panelRef}
         className="relative rounded-t-2xl bg-background shadow-[0_-4px_24px_rgba(0,0,0,0.08)] md:hidden"
         style={{ zIndex: 20 }}
       >
@@ -170,7 +169,7 @@ function MobileEventsView() {
         </div>
       </div>
 
-      {/* 4. Search pill + animated backdrop */}
+      {/* 3. Search pill + animated backdrop */}
       <div
         className="fixed top-0 left-0 right-0 pointer-events-none md:hidden"
         style={{ zIndex: 45 }}

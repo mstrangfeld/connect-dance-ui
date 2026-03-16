@@ -49,7 +49,12 @@ function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }
       prevCenter.current[1] !== center[1] ||
       prevZoom.current !== zoom
     ) {
-      map.flyTo(center, zoom, { duration: 0.8 })
+      const size = map.getSize()
+      if (size.x > 0 && size.y > 0) {
+        map.flyTo(center, zoom, { duration: 0.8 })
+      } else {
+        map.setView(center, zoom)
+      }
       prevCenter.current = center
       prevZoom.current = zoom
     }

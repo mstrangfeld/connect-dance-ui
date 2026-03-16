@@ -48,9 +48,12 @@ export function MobileEventsFilterPill({
   embedded,
 }: MobileEventsFilterPillProps) {
   const [panelOpen, setPanelOpen] = useState(false)
+  const [animState, setAnimState] = useState<"closed" | "entering" | "open" | "exiting">("closed")
   const [expandedSection, setExpandedSection] =
     useState<ExpandedSection>("location")
   const locationInputRef = useRef<HTMLInputElement>(null)
+  const pillRef = useRef<HTMLButtonElement>(null)
+  const [clipOrigin, setClipOrigin] = useState({ top: 0, right: 0, bottom: 0, left: 0 })
 
   const suggestions = useMemo(() => {
     if (!locationQuery.trim()) return CITIES.slice(0, 6)
@@ -59,26 +62,55 @@ export function MobileEventsFilterPill({
   }, [locationQuery])
 
   useEffect(() => {
-    if (panelOpen) document.body.style.overflow = "hidden"
+    if (animState === "entering" || animState === "open") document.body.style.overflow = "hidden"
     else document.body.style.overflow = ""
     return () => {
       document.body.style.overflow = ""
     }
-  }, [panelOpen])
+  }, [animState])
 
+  const closePanelRef = useRef(closePanel)
+  closePanelRef.current = closePanel
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setPanelOpen(false)
+      if (e.key === "Escape") closePanelRef.current()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
   }, [])
 
   function openPanel(section: ExpandedSection = "location") {
+    // Capture pill position for clip-path origin
+    if (pillRef.current) {
+      const rect = pillRef.current.getBoundingClientRect()
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      setClipOrigin({
+        top: rect.top,
+        right: vw - rect.right,
+        bottom: vh - rect.bottom,
+        left: rect.left,
+      })
+    }
     setExpandedSection(section)
     setPanelOpen(true)
+    setAnimState("entering")
+    // Trigger reflow then transition to open
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setAnimState("open")
+      })
+    })
     if (section === "location")
       setTimeout(() => locationInputRef.current?.focus(), 100)
+  }
+
+  function closePanel() {
+    setAnimState("exiting")
+    setTimeout(() => {
+      setPanelOpen(false)
+      setAnimState("closed")
+    }, 350)
   }
 
   function toggleSection(section: ExpandedSection) {
@@ -105,6 +137,7 @@ export function MobileEventsFilterPill({
     <>
       {/* Pill trigger button */}
       <button
+        ref={pillRef}
         onClick={() => openPanel("location")}
         className="flex w-full items-center gap-3 rounded-full border border-border/60 bg-card px-4 py-2.5 shadow-sm text-left transition-colors hover:bg-secondary/50 active:bg-secondary"
       >
@@ -153,11 +186,19 @@ export function MobileEventsFilterPill({
       {/* Full-screen filter panel */}
       {panelOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+          <div
+            className="fixed inset-0 z-[60] flex flex-col bg-background"
+            style={{
+              clipPath: animState === "open"
+                ? "inset(0 0 0 0 round 0px)"
+                : `inset(${clipOrigin.top}px ${clipOrigin.right}px ${clipOrigin.bottom}px ${clipOrigin.left}px round 24px)`,
+              transition: "clip-path 0.35s cubic-bezier(0.32, 0.72, 0, 1)",
+            }}
+          >
             {/* Header */}
             <div className="flex shrink-0 items-center gap-4 border-b border-border/50 px-4 py-4">
               <button
-                onClick={() => setPanelOpen(false)}
+                onClick={closePanel}
                 className="flex size-8 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary"
                 aria-label="Close filters"
               >
@@ -388,7 +429,7 @@ export function MobileEventsFilterPill({
                 </Link>
               ) : (
                 <button
-                  onClick={() => setPanelOpen(false)}
+                  onClick={closePanel}
                   className="flex w-full items-center justify-center rounded-2xl bg-primary py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 active:opacity-80"
                 >
                   Show {resultCount} result{resultCount !== 1 ? "s" : ""}

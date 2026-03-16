@@ -34,24 +34,10 @@ export function EventsSection({
     () => typeof window !== "undefined" && window.innerWidth >= 1024,
   )
   const [activeEventId, setActiveEventId] = useState<string | undefined>()
-  const [searchBarHeight, setSearchBarHeight] = useState(0)
 
   const sentinelRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const searchBarRef = useRef<HTMLDivElement>(null)
-
-  // Measure search bar height for sticky map offset
-  useEffect(() => {
-    const el = searchBarRef.current
-    if (!el) return
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setSearchBarHeight(entry.borderBoxSize[0].blockSize)
-      }
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
 
   // Infinite scroll
   useEffect(() => {
@@ -77,18 +63,15 @@ export function EventsSection({
     if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" })
   }, [])
 
-  const mapTop = NAV_HEIGHT + searchBarHeight
-  const mapHeight = `calc(100svh - ${mapTop}px)`
-
   return (
     <div
       id="events-list"
-      className={`flex flex-col ${embedded ? "mx-auto w-full max-w-7xl" : "min-h-[calc(100svh-3.5rem)]"}`}
+      className={`flex flex-col ${embedded ? "mx-auto w-full max-w-7xl" : "h-[calc(100svh-3.5rem)]"}`}
     >
-      {/* Search bar — sticky below the fixed nav */}
+      {/* Search bar */}
       <div
         ref={searchBarRef}
-        className="shrink-0 border-b border-border/50 bg-background px-6 py-4 sticky top-0 md:top-14 z-40"
+        className="relative shrink-0 border-b border-border/50 bg-background px-6 py-4 z-40"
       >
         {/* Mobile pill */}
         <div className="md:hidden mx-auto max-w-2xl">
@@ -129,30 +112,15 @@ export function EventsSection({
           onToggleMap={() => setShowMap(!showMap)}
         />
 
-        {/* Active filters summary */}
-        {hasActiveFilters && (
-          <div className="mt-2.5 hidden md:flex items-center justify-center gap-1.5">
-            <span className="text-xs text-muted-foreground">
-              {filtered.length} event{filtered.length !== 1 ? "s" : ""}
-            </span>
-            <span className="text-muted-foreground">·</span>
-            <button
-              onClick={actions.clearAll}
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Main content: event list + map sidebar */}
       <div
-        className={`flex w-full flex-1 justify-center ${embedded ? "lg:min-h-[600px]" : "min-h-0"}`}
+        className={`relative z-0 flex w-full flex-1 justify-center ${embedded ? "lg:min-h-[600px]" : "min-h-0"}`}
       >
         <div className="flex min-h-0 w-full max-w-[2500px] flex-1">
           {/* Scrollable event list */}
-          <div ref={listRef} className="@container min-h-0 flex-1">
+          <div ref={listRef} className="@container min-h-0 flex-1 overflow-y-auto">
             {sorted.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center px-6 py-20 text-center">
                 <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
@@ -236,22 +204,17 @@ export function EventsSection({
             )}
           </div>
 
-          {/* Map sidebar — sticky, fills remaining viewport below nav + search bar */}
+          {/* Map sidebar — fixed height, no scroll */}
           {showMap && (
-            <div className="hidden lg:block w-[45%] shrink-0 z-0">
-              <div
-                className="sticky pr-3 pb-3"
-                style={{ top: `${mapTop}px`, height: mapHeight }}
-              >
-                <div className="h-full overflow-hidden rounded-xl">
-                  <EventMap
-                    events={filtered}
-                    searchCenter={filters.searchCenter}
-                    radiusKm={filters.radius}
-                    activeEventId={activeEventId}
-                    onEventSelect={handleEventSelect}
-                  />
-                </div>
+            <div className="hidden lg:block w-[45%] shrink-0 pr-3 pb-3">
+              <div className="h-full overflow-hidden rounded-xl">
+                <EventMap
+                  events={filtered}
+                  searchCenter={filters.searchCenter}
+                  radiusKm={filters.radius}
+                  activeEventId={activeEventId}
+                  onEventSelect={handleEventSelect}
+                />
               </div>
             </div>
           )}
