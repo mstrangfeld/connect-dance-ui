@@ -116,6 +116,9 @@ export function EventMap({
       className="h-full w-full"
       zoomControl={false}
       attributionControl={false}
+      minZoom={2}
+      maxBounds={[[-85, -180], [85, 180]]}
+      maxBoundsViscosity={1.0}
     >
       <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
       <MapUpdater center={center} zoom={zoom} />

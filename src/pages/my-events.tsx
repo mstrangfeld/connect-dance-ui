@@ -7,7 +7,30 @@ import { EventCard } from "@/components/event-card"
 const TODAY = new Date().toISOString().slice(0, 10)
 
 export function MyEventsPage() {
-  const { attendingEventIds, toggleAttending } = useAuth()
+  const { isLoggedIn, attendingEventIds, toggleAttending } = useAuth()
+
+  if (!isLoggedIn) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-20 text-center">
+        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 mx-auto">
+          <svg viewBox="0 0 24 24" fill="none" className="size-5 text-muted-foreground" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M8 2v4M16 2v4M3 10h18" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold">Sign in to see your events</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Events you mark as "I'm going" will be saved here.
+        </p>
+        <Link
+          to="/sign-in"
+          className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Sign in
+        </Link>
+      </div>
+    )
+  }
 
   const { upcoming, past } = useMemo(() => {
     const attending = MOCK_EVENTS.filter((e) => attendingEventIds.includes(e.id))

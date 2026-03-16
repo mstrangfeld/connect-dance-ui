@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { useState, useRef, useEffect } from "react"
-import { Link, useNavigate } from "react-router"
+import { Link, useNavigate, useLocation } from "react-router"
 import { useAuth } from "@/context/auth"
 
 function UserMenu() {
@@ -88,18 +88,10 @@ function UserMenu() {
 }
 
 export function Nav() {
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const { isLoggedIn, logout } = useAuth()
-  const navigate = useNavigate()
-
-  const handleMobileLogout = () => {
-    logout()
-    setMobileOpen(false)
-    navigate("/")
-  }
+  const { isLoggedIn } = useAuth()
 
   return (
-    <nav className="fixed top-0 right-0 left-0 z-50 border-b border-border/50 bg-background/90 backdrop-blur-xl">
+    <nav className="fixed top-0 right-0 left-0 z-50 border-b border-border/50 bg-background/90 backdrop-blur-xl hidden md:block">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-8 px-6">
         <Link to="/" className="flex shrink-0 items-center gap-2.5">
           <svg viewBox="0 0 28 28" fill="none" className="size-6">
@@ -113,9 +105,9 @@ export function Nav() {
           </span>
         </Link>
 
+        {/* Desktop nav — hidden on mobile */}
         {isLoggedIn ? (
           <>
-            {/* Logged-in desktop nav */}
             <div className="hidden items-center gap-1 md:flex">
               <Button variant="ghost" size="sm" className="text-[13px] text-muted-foreground hover:text-foreground" asChild>
                 <Link to="/my-events">My Events</Link>
@@ -129,7 +121,7 @@ export function Nav() {
             </div>
           </>
         ) : (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto hidden items-center gap-2 md:flex">
             <Button variant="ghost" size="sm" className="text-[13px] text-muted-foreground hover:text-foreground" asChild>
               <Link to="/list-event">List your event</Link>
             </Button>
@@ -142,64 +134,88 @@ export function Nav() {
             </Button>
           </div>
         )}
-
-        {/* Mobile hamburger — only shown when logged in */}
-        <button
-          className={`flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground md:hidden ${isLoggedIn ? "" : "hidden"}`}
-          onClick={() => setMobileOpen(!mobileOpen)}
-          aria-label="Toggle menu"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            className="size-5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          >
-            {mobileOpen ? (
-              <>
-                <path d="M18 6L6 18" />
-                <path d="M6 6l12 12" />
-              </>
-            ) : (
-              <>
-                <path d="M4 8h16" />
-                <path d="M4 16h16" />
-              </>
-            )}
-          </svg>
-        </button>
       </div>
+    </nav>
+  )
+}
 
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <div className="border-t border-border/50 bg-background px-6 pb-4 md:hidden">
-          <div className="flex flex-col gap-0.5 pt-2">
-            {isLoggedIn ? (
-              <>
-                <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" asChild>
-                  <Link to="/my-events" onClick={() => setMobileOpen(false)}>My Events</Link>
-                </Button>
-                <div className="my-2 h-px bg-border/60" />
-                <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={handleMobileLogout}>
-                  Sign out
-                </Button>
-              </>
+export function MobileBottomNav() {
+  const { isLoggedIn, currentUser } = useAuth()
+  const location = useLocation()
+  const pathname = location.pathname
+
+  const isActive = (path: string) => pathname === path || (path !== "/events" && pathname.startsWith(path))
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background/95 backdrop-blur-xl md:hidden">
+      <div className="flex items-center justify-around px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+
+        {/* Explore */}
+        <Link
+          to="/events"
+          className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+            isActive("/events") ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth={isActive("/events") ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <span className="text-[10px] font-medium">Explore</span>
+        </Link>
+
+        {/* My Events */}
+        <Link
+          to="/my-events"
+          className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+            isActive("/my-events") ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth={isActive("/my-events") ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M8 2v4M16 2v4M3 10h18" />
+          </svg>
+          <span className="text-[10px] font-medium">My Events</span>
+        </Link>
+
+        {/* Profile / Sign in */}
+        {isLoggedIn ? (
+          <Link
+            to="/account"
+            className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+              isActive("/account") ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            {currentUser?.avatar ? (
+              <img
+                src={currentUser.avatar}
+                alt={currentUser.name}
+                className={`size-6 rounded-full object-cover ring-1 ${isActive("/account") ? "ring-primary" : "ring-border"}`}
+              />
             ) : (
-              <>
-                <Button variant="ghost" size="sm" className="justify-start" asChild>
-                  <Link to="/sign-in" onClick={() => setMobileOpen(false)}>Sign in</Link>
-                </Button>
-                <Button size="sm" className="mt-1 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                  <Link to="/list-event" onClick={() => setMobileOpen(false)}>List an event</Link>
-                </Button>
-              </>
+              <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth={isActive("/account") ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+              </svg>
             )}
-          </div>
-        </div>
-      )}
+            <span className="text-[10px] font-medium">Profile</span>
+          </Link>
+        ) : (
+          <Link
+            to="/sign-in"
+            className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+              isActive("/sign-in") ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth={isActive("/sign-in") ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+            </svg>
+            <span className="text-[10px] font-medium">Sign in</span>
+          </Link>
+        )}
 
+      </div>
     </nav>
   )
 }

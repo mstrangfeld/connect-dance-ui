@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { EventCard } from "@/components/event-card"
 import { EventMap } from "@/components/event-map"
+import { MobileEventsFilterPill } from "@/components/mobile-events-filter-pill"
 import { MOCK_EVENTS, EVENT_TYPE_LABELS, RADIUS_OPTIONS, CITIES } from "@/data/mock-events"
 import type { EventType, DanceEvent } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
@@ -56,12 +57,9 @@ export function EventsSection({ embedded, activeTypes: externalActiveTypes, onAc
   const [showMap, setShowMap] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1024)
   const [activeEventId, setActiveEventId] = useState<string | undefined>(undefined)
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
-  const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
-  const [mobileExpandedSection, setMobileExpandedSection] = useState<OpenPanel>(null)
 
   const searchBarRef = useRef<HTMLDivElement>(null)
   const locationInputRef = useRef<HTMLInputElement>(null)
-  const mobileLocationInputRef = useRef<HTMLInputElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -79,26 +77,11 @@ export function EventsSection({ embedded, activeTypes: externalActiveTypes, onAc
   // Close panels on Escape
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setOpenPanel(null)
-        setMobilePanelOpen(false)
-      }
+      if (e.key === "Escape") setOpenPanel(null)
     }
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [])
-
-  // Lock body scroll when mobile filter panel is open
-  useEffect(() => {
-    if (mobilePanelOpen) {
-      document.body.style.overflow = "hidden"
-    } else {
-      document.body.style.overflow = ""
-    }
-    return () => {
-      document.body.style.overflow = ""
-    }
-  }, [mobilePanelOpen])
 
   // Infinite scroll
   useEffect(() => {
@@ -195,13 +178,6 @@ export function EventsSection({ embedded, activeTypes: externalActiveTypes, onAc
     }
   }
 
-  function toggleMobileSection(section: OpenPanel) {
-    setMobileExpandedSection((prev) => (prev === section ? null : section))
-    if (section === "location") {
-      setTimeout(() => mobileLocationInputRef.current?.focus(), 100)
-    }
-  }
-
   // Summary labels for each segment
   const locationLabel = activeLocation || "Anywhere"
   const dateLabel = formatDateRangeLabel(dateRange)
@@ -212,38 +188,6 @@ export function EventsSection({ embedded, activeTypes: externalActiveTypes, onAc
         ? EVENT_TYPE_LABELS[[...activeTypes][0]]
         : `${activeTypes.size} types`
 
-  const filterCount = (activeLocation ? 1 : 0) + (dateRange?.from ? 1 : 0) + (activeTypes.size > 0 ? 1 : 0)
-
-  // Shared inner content for the mobile pill
-  const mobilePillInner = (
-    <>
-      <svg viewBox="0 0 24 24" fill="none" className="size-[18px] shrink-0 text-muted-foreground/50" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <path d="M21 21l-4.35-4.35" />
-      </svg>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-[13px] font-semibold leading-none text-foreground">
-          {activeLocation || "Anywhere"}
-        </span>
-        <span className="truncate text-[11px] leading-none text-muted-foreground">
-          {dateLabel} · {typeLabel}
-        </span>
-      </div>
-      {hasActiveFilters ? (
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
-          {filterCount}
-        </span>
-      ) : (
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <svg viewBox="0 0 24 24" fill="none" className="size-[14px]" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-        </span>
-      )}
-    </>
-  )
-
   return (
     <div id="events-list" className={`flex flex-col ${embedded ? "mx-auto w-full max-w-7xl" : "h-[calc(100svh-3.5rem)]"}`}>
       {/* Search bar */}
@@ -251,15 +195,27 @@ export function EventsSection({ embedded, activeTypes: externalActiveTypes, onAc
         <div ref={searchBarRef} className="relative mx-auto max-w-2xl">
 
           {/* ── Mobile pill (< md) ──────────────────────────── */}
-          <button
-            onClick={() => {
-              setMobileExpandedSection("location")
-              setMobilePanelOpen(true)
-            }}
-            className="flex md:hidden w-full items-center gap-3 rounded-full border border-border/60 bg-card px-4 py-2.5 shadow-sm text-left transition-colors hover:bg-secondary/50 active:bg-secondary"
-          >
-            {mobilePillInner}
-          </button>
+          <div className="md:hidden">
+            <MobileEventsFilterPill
+              locationQuery={locationQuery}
+              onLocationQueryChange={(q) => {
+                setLocationQuery(q)
+                if (!q.trim()) { setActiveLocation(""); setSearchCenter(undefined) }
+              }}
+              activeLocation={activeLocation}
+              onLocationSelect={(city) => { setLocationQuery(city.name); setActiveLocation(city.name); setSearchCenter([city.lat, city.lng]) }}
+              onLocationClear={() => { setLocationQuery(""); setActiveLocation(""); setSearchCenter(undefined) }}
+              radius={radius}
+              onRadiusChange={setRadius}
+              dateRange={dateRange}
+              onDateRangeChange={setDateRange}
+              activeTypes={activeTypes}
+              onTypeToggle={toggleType}
+              onClearAll={clearAll}
+              resultCount={filtered.length}
+              embedded={embedded}
+            />
+          </div>
 
           {/* ── Desktop segmented bar (≥ md) ───────────────── */}
           <div
@@ -673,7 +629,7 @@ export function EventsSection({ embedded, activeTypes: externalActiveTypes, onAc
 
       {/* Mobile map toggle (floating) */}
       {!embedded && (
-        <div className="fixed right-4 bottom-6 z-40 lg:hidden">
+        <div className="fixed right-4 bottom-[4.5rem] z-40 lg:hidden">
           <Button
             onClick={() => setShowMap(!showMap)}
             className="shadow-lg shadow-slate-900/15"
@@ -713,239 +669,6 @@ export function EventsSection({ embedded, activeTypes: externalActiveTypes, onAc
         </div>
       )}
 
-      {/* Mobile filter modal – full-screen sheet, visible only < md */}
-      {mobilePanelOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background md:hidden">
-          {/* Header */}
-          <div className="flex shrink-0 items-center gap-4 border-b border-border/50 px-4 py-4">
-            <button
-              onClick={() => setMobilePanelOpen(false)}
-              className="flex size-8 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary"
-              aria-label="Close filters"
-            >
-              <XIcon />
-            </button>
-            <span className="flex-1 text-center text-sm font-semibold">Filters</span>
-            {hasActiveFilters ? (
-              <button
-                onClick={clearAll}
-                className="text-xs font-medium text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
-              >
-                Clear all
-              </button>
-            ) : (
-              <div className="w-14" />
-            )}
-          </div>
-
-          {/* Scrollable filter sections */}
-          <div className="flex-1 overflow-y-auto divide-y divide-border/50">
-
-            {/* WHERE */}
-            <div>
-              <button
-                onClick={() => toggleMobileSection("location")}
-                className="flex w-full items-center justify-between px-5 py-4 text-left"
-              >
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Where</div>
-                  <div className={`mt-0.5 text-[15px] font-medium ${activeLocation ? "text-foreground" : "text-muted-foreground"}`}>
-                    {locationLabel}
-                    {activeLocation && (
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        · {RADIUS_OPTIONS.find(o => o.value === radius)?.label}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ChevronIcon expanded={mobileExpandedSection === "location"} />
-              </button>
-              {mobileExpandedSection === "location" && (
-                <div className="px-5 pb-5">
-                  <input
-                    ref={mobileLocationInputRef}
-                    type="text"
-                    placeholder="Search cities..."
-                    value={locationQuery}
-                    onChange={(e) => {
-                      setLocationQuery(e.target.value)
-                      if (!e.target.value.trim()) {
-                        setActiveLocation("")
-                        setSearchCenter(undefined)
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && suggestions.length > 0) {
-                        selectLocation(suggestions[0])
-                      }
-                    }}
-                    className="mb-2 h-10 w-full rounded-xl bg-secondary/50 px-4 text-sm transition-colors placeholder:text-muted-foreground/40 focus:bg-secondary focus:outline-none"
-                  />
-                  <div className="flex flex-col gap-0.5">
-                    {suggestions.map((city) => (
-                      <button
-                        key={city.name}
-                        onClick={() => selectLocation(city)}
-                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
-                          activeLocation === city.name
-                            ? "bg-primary/8 text-primary font-medium"
-                            : "text-foreground hover:bg-secondary"
-                        }`}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 text-muted-foreground/40" stroke="currentColor" strokeWidth="1.5">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                        {city.name}
-                        {activeLocation === city.name && (
-                          <svg viewBox="0 0 24 24" fill="none" className="ml-auto size-4 text-primary" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M20 6L9 17l-5-5" />
-                          </svg>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  {activeLocation && (
-                    <>
-                      <div className="my-3 h-px bg-border/50" />
-                      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Radius</div>
-                      <div className="flex flex-wrap gap-2">
-                        {RADIUS_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.value}
-                            onClick={() => setRadius(opt.value)}
-                            className={`rounded-xl px-4 py-2 text-[13px] font-medium transition-colors ${
-                              radius === opt.value
-                                ? "bg-foreground text-background"
-                                : "border border-border/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* WHEN */}
-            <div>
-              <button
-                onClick={() => toggleMobileSection("date")}
-                className="flex w-full items-center justify-between px-5 py-4 text-left"
-              >
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">When</div>
-                  <div className={`mt-0.5 text-[15px] font-medium ${dateRange?.from ? "text-foreground" : "text-muted-foreground"}`}>
-                    {dateLabel}
-                  </div>
-                </div>
-                <ChevronIcon expanded={mobileExpandedSection === "date"} />
-              </button>
-              {mobileExpandedSection === "date" && (
-                <div className="pb-4">
-                  <Calendar
-                    mode="range"
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    defaultMonth={dateRange?.from ?? new Date()}
-                    numberOfMonths={1}
-                    modifiers={{ past: { before: new Date() } }}
-                    modifiersClassNames={{ past: "opacity-25" }}
-                    classNames={{
-                      months: "relative flex flex-col",
-                      month: "flex w-full flex-col gap-3 px-4 py-2",
-                      month_caption: "flex h-8 items-center justify-center px-8",
-                      caption_label: "text-[13px] font-bold tracking-wide",
-                      weekdays: "flex border-b border-border/40 pb-2",
-                      weekday: "flex-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground select-none",
-                      week: "mt-2 flex w-full",
-                    }}
-                  />
-                  {dateRange?.from && (
-                    <div className="flex justify-end px-5 pt-1">
-                      <button
-                        onClick={() => setDateRange(undefined)}
-                        className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* WHAT */}
-            <div>
-              <button
-                onClick={() => toggleMobileSection("type")}
-                className="flex w-full items-center justify-between px-5 py-4 text-left"
-              >
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">What</div>
-                  <div className={`mt-0.5 text-[15px] font-medium ${activeTypes.size > 0 ? "text-foreground" : "text-muted-foreground"}`}>
-                    {typeLabel}
-                  </div>
-                </div>
-                <ChevronIcon expanded={mobileExpandedSection === "type"} />
-              </button>
-              {mobileExpandedSection === "type" && (
-                <div className="px-5 pb-5">
-                  <div className="flex flex-col gap-1">
-                    {EVENT_TYPES.map((type) => {
-                      const selected = activeTypes.has(type.value)
-                      return (
-                        <button
-                          key={type.value}
-                          onClick={() => toggleType(type.value)}
-                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
-                            selected
-                              ? "bg-primary/8 text-primary font-medium"
-                              : "text-foreground hover:bg-secondary"
-                          }`}
-                        >
-                          <span className={`size-2.5 rounded-full ${TYPE_DOTS[type.value] ?? "bg-slate-400"}`} />
-                          {type.label}
-                          <span className={`ml-auto flex size-5 items-center justify-center rounded-md ${selected ? "bg-primary" : "border border-border"}`}>
-                            {selected && (
-                              <svg viewBox="0 0 24 24" fill="none" className="size-3 text-primary-foreground" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                            )}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-          </div>
-
-          {/* Footer: show results button */}
-          <div className="shrink-0 border-t border-border/50 px-4 py-4">
-            {embedded ? (
-              <Link
-                to="/events"
-                className="flex w-full items-center justify-center rounded-2xl bg-primary py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 active:opacity-80"
-              >
-                Search events
-              </Link>
-            ) : (
-              <button
-                onClick={() => setMobilePanelOpen(false)}
-                className="flex w-full items-center justify-center rounded-2xl bg-primary py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 active:opacity-80"
-              >
-                Show {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -959,21 +682,6 @@ function XIcon() {
   )
 }
 
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      className={`size-5 shrink-0 text-muted-foreground/60 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M6 9l6 6 6-6" />
-    </svg>
-  )
-}
 
 // Haversine distance in km
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
