@@ -10,7 +10,6 @@ import { formatDateRangeLabel } from "@/lib/events"
 import type { EventType } from "@/data/mock-events"
 
 const BATCH_SIZE = 12
-const NAV_HEIGHT = 56 // 3.5rem
 
 interface EventsSectionProps {
   embedded?: boolean
@@ -23,7 +22,7 @@ export function EventsSection({
   activeTypes: externalActiveTypes,
   onActiveTypesChange,
 }: EventsSectionProps) {
-  const { filters, actions, filtered, sorted, hasActiveFilters } =
+  const { filters, actions, filtered, sorted } =
     useEventFilters({
       externalActiveTypes,
       onActiveTypesChange,
