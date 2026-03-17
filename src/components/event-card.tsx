@@ -29,11 +29,12 @@ export function EventCard({ event, isActive }: EventCardProps) {
   const extraCount = Math.max(0, event.attendees - avatars.length)
   const accent = TYPE_ACCENTS[event.type] ?? TYPE_ACCENTS.party
   const secondaryTypes = event.categories.filter((c) => c !== event.type)
+  const isPast = new Date((event.endDate ?? event.date) + "T23:59:59") < new Date()
 
   return (
     <Link
       to={`/events/${event.id}`}
-      className={`group relative block overflow-hidden rounded-xl bg-card transition-all duration-200 ${
+      className={`group relative block overflow-hidden rounded-xl bg-card transition-all duration-200 ${isPast ? "opacity-65" : ""} ${
         isActive
           ? "shadow-lg shadow-slate-900/8 ring-1 ring-border dark:shadow-slate-900/20"
           : "hover:shadow-md hover:shadow-slate-900/5 hover:ring-1 hover:ring-border/60 dark:hover:shadow-slate-900/15"
@@ -70,8 +71,13 @@ export function EventCard({ event, isActive }: EventCardProps) {
               </div>
             )}
           </div>
-          <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+          <span className="shrink-0 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             {formatEventDateRange(event.date, event.endDate)}
+            {isPast && (
+              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                Past
+              </span>
+            )}
           </span>
         </div>
 

@@ -211,6 +211,23 @@ function MobileEventsView() {
             {visibleEvents.length} event{visibleEvents.length !== 1 ? "s" : ""}{" "}
             <span className="font-normal text-muted-foreground">in this area</span>
           </p>
+          <label className="shrink-0 flex items-center gap-2 cursor-pointer select-none">
+            <span className="text-[11px] font-medium text-muted-foreground">Show past</span>
+            <button
+              role="switch"
+              aria-checked={filters.includePast}
+              onClick={() => actions.setIncludePast(!filters.includePast)}
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                filters.includePast ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"
+              }`}
+            >
+              <span
+                className={`pointer-events-none block size-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                  filters.includePast ? "translate-x-[18px]" : "translate-x-[3px]"
+                }`}
+              />
+            </button>
+          </label>
         </div>
 
         <div className="px-4 pb-6">

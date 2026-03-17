@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from "react"
+import { useNavigate } from "react-router"
 import { Calendar } from "@/components/ui/calendar"
 import { XIcon, LocationIcon, CheckIcon, SearchIcon, MapIcon } from "@/components/icons"
-import { CITIES, EVENT_TYPE_LABELS } from "@/data/mock-events"
-import type { EventType, City } from "@/data/mock-events"
+import { CITIES, MOCK_EVENTS, EVENT_TYPE_LABELS } from "@/data/mock-events"
+import type { EventType, City, DanceEvent } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
-import { formatDateRangeLabel, TYPE_DOTS } from "@/lib/events"
+import { formatDateRangeLabel, formatEventDateRange, TYPE_DOTS } from "@/lib/events"
 
 type OpenPanel = "location" | "date" | "type" | null
 
@@ -66,10 +67,20 @@ export function DesktopSearchBar({
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  const suggestions = useMemo(() => {
+  const navigate = useNavigate()
+
+  const citySuggestions = useMemo(() => {
     if (!locationQuery.trim()) return CITIES.slice(0, 6)
     const q = locationQuery.toLowerCase()
     return CITIES.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 6)
+  }, [locationQuery])
+
+  const eventSuggestions = useMemo(() => {
+    const q = locationQuery.trim().toLowerCase()
+    if (!q) return []
+    return MOCK_EVENTS.filter((e) =>
+      e.title.toLowerCase().includes(q),
+    ).slice(0, 5)
   }, [locationQuery])
 
   function selectLocation(city: City) {
@@ -240,46 +251,112 @@ export function DesktopSearchBar({
         </div>
       </div>
 
-      {/* Location dropdown panel */}
+      {/* Location / search dropdown panel */}
       {openPanel === "location" && (
         <div
-          className="absolute top-full left-0 z-50 mt-2 w-full max-w-md overflow-hidden rounded-2xl border border-border/60 bg-popover p-2 shadow-xl shadow-slate-900/8"
+          className="absolute top-full left-0 z-50 mt-2 w-full max-w-md overflow-hidden rounded-2xl border border-border/60 bg-popover shadow-xl shadow-slate-900/8"
           role="listbox"
-          aria-label="Select location"
+          aria-label="Search events and locations"
         >
-          <div className="px-2 pb-2">
+          <div className="p-2 pb-0">
             <input
               ref={locationInputRef}
               type="text"
-              placeholder="Search cities..."
+              placeholder="Search events or cities..."
               value={locationQuery}
               onChange={(e) => onLocationQueryChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && suggestions.length > 0)
-                  selectLocation(suggestions[0])
+                if (e.key === "Enter") {
+                  if (eventSuggestions.length > 0) {
+                    navigate(`/events/${eventSuggestions[0].id}`)
+                    setOpenPanel(null)
+                  } else if (citySuggestions.length > 0) {
+                    selectLocation(citySuggestions[0])
+                  }
+                }
               }}
               className="h-10 w-full rounded-lg bg-secondary/50 px-3 text-sm transition-colors placeholder:text-muted-foreground/40 focus:bg-secondary focus:outline-none"
             />
           </div>
-          {suggestions.map((city) => (
-            <button
-              key={city.name}
-              role="option"
-              aria-selected={activeLocation === city.name}
-              onClick={() => selectLocation(city)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-                activeLocation === city.name
-                  ? "bg-primary/8 text-primary font-medium"
-                  : "text-foreground hover:bg-secondary"
-              }`}
-            >
-              <LocationIcon className="size-4" />
-              {city.name}
-              {activeLocation === city.name && (
-                <CheckIcon className="ml-auto size-4 text-primary" />
-              )}
-            </button>
-          ))}
+
+          <div className="max-h-[320px] overflow-y-auto p-2">
+            {/* Event results */}
+            {eventSuggestions.length > 0 && (
+              <div>
+                <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Events
+                </div>
+                {eventSuggestions.map((event) => {
+                  const isPast = new Date((event.endDate ?? event.date) + "T23:59:59") < new Date()
+                  return (
+                    <button
+                      key={event.id}
+                      role="option"
+                      aria-selected={false}
+                      onClick={() => {
+                        navigate(`/events/${event.id}`)
+                        setOpenPanel(null)
+                      }}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors text-foreground hover:bg-secondary"
+                    >
+                      <span className={`size-2 shrink-0 rounded-full ${TYPE_DOTS[event.type] ?? "bg-slate-400"}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className={`truncate text-[13px] font-medium ${isPast ? "text-muted-foreground" : ""}`}>
+                          {event.title}
+                        </div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {event.location} · {formatEventDateRange(event.date, event.endDate)}
+                          {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wider opacity-60">Past</span>}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Divider between events and cities */}
+            {eventSuggestions.length > 0 && citySuggestions.length > 0 && (
+              <div className="my-1 border-t border-border/40" />
+            )}
+
+            {/* City results */}
+            {citySuggestions.length > 0 && (
+              <div>
+                {locationQuery.trim() && (
+                  <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Cities
+                  </div>
+                )}
+                {citySuggestions.map((city) => (
+                  <button
+                    key={city.name}
+                    role="option"
+                    aria-selected={activeLocation === city.name}
+                    onClick={() => selectLocation(city)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                      activeLocation === city.name
+                        ? "bg-primary/8 text-primary font-medium"
+                        : "text-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    <LocationIcon className="size-4" />
+                    {city.name}
+                    {activeLocation === city.name && (
+                      <CheckIcon className="ml-auto size-4 text-primary" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* No results */}
+            {eventSuggestions.length === 0 && citySuggestions.length === 0 && locationQuery.trim() && (
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                No events or cities found
+              </div>
+            )}
+          </div>
         </div>
       )}
 

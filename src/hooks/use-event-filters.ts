@@ -10,6 +10,7 @@ export interface EventFilters {
   searchCenter: [number, number] | undefined
   dateRange: DateRange | undefined
   activeTypes: Set<EventType>
+  includePast: boolean
 }
 
 export interface EventFilterActions {
@@ -19,6 +20,7 @@ export interface EventFilterActions {
   setDateRange: (range: DateRange | undefined) => void
   toggleType: (type: EventType) => void
   setActiveTypes: (types: Set<EventType>) => void
+  setIncludePast: (include: boolean) => void
   clearAll: () => void
 }
 
@@ -42,6 +44,7 @@ export function useEventFilters(options?: {
     [number, number] | undefined
   >(init?.searchCenter)
   const [dateRange, setDateRange] = useState<DateRange | undefined>(init?.dateRange)
+  const [includePast, setIncludePast] = useState(init?.includePast ?? false)
   const [internalActiveTypes, setInternalActiveTypes] = useState<
     Set<EventType>
   >(init?.activeTypes ?? new Set())
@@ -82,6 +85,7 @@ export function useEventFilters(options?: {
     setActiveTypes(new Set())
     clearLocation()
     setDateRange(undefined)
+    setIncludePast(false)
   }, [setActiveTypes, clearLocation])
 
   const handleLocationQueryChange = useCallback(
@@ -96,7 +100,14 @@ export function useEventFilters(options?: {
   )
 
   const filtered = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
     return MOCK_EVENTS.filter((e) => {
+      // Past events filter: use endDate if available, otherwise date
+      if (!includePast) {
+        const eventEnd = new Date((e.endDate ?? e.date) + "T23:59:59")
+        if (eventEnd < today) return false
+      }
       if (activeTypes.size > 0 && !e.categories.some((c) => activeTypes.has(c)))
         return false
       if (dateRange?.from) {
@@ -109,12 +120,21 @@ export function useEventFilters(options?: {
       }
       return true
     })
-  }, [activeTypes, dateRange])
+  }, [activeTypes, dateRange, includePast])
 
-  const sorted = useMemo(
-    () => [...filtered].sort((a, b) => a.date.localeCompare(b.date)),
-    [filtered],
-  )
+  const sorted = useMemo(() => {
+    if (!includePast) {
+      return [...filtered].sort((a, b) => a.date.localeCompare(b.date))
+    }
+    // When showing past events, put upcoming first (ascending), then past (most recent first)
+    const today = new Date().toISOString().slice(0, 10)
+    const upcoming = filtered.filter((e) => (e.endDate ?? e.date) >= today)
+    const past = filtered.filter((e) => (e.endDate ?? e.date) < today)
+    return [
+      ...upcoming.sort((a, b) => a.date.localeCompare(b.date)),
+      ...past.sort((a, b) => b.date.localeCompare(a.date)),
+    ]
+  }, [filtered, includePast])
 
   const hasActiveFilters =
     activeTypes.size > 0 || activeLocation !== "" || !!dateRange?.from
@@ -126,6 +146,7 @@ export function useEventFilters(options?: {
       searchCenter,
       dateRange,
       activeTypes,
+      includePast,
     },
     actions: {
       setLocationQuery: handleLocationQueryChange,
@@ -134,6 +155,7 @@ export function useEventFilters(options?: {
       setDateRange,
       toggleType,
       setActiveTypes,
+      setIncludePast,
       clearAll,
     },
     filtered,

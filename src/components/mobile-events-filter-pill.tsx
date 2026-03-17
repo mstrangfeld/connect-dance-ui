@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from "react"
 import { createPortal } from "react-dom"
+import { useNavigate } from "react-router"
 import { Calendar } from "@/components/ui/calendar"
 import { XIcon, ChevronIcon, LocationIcon, CheckIcon } from "@/components/icons"
-import { EVENT_TYPE_LABELS, CITIES } from "@/data/mock-events"
+import { EVENT_TYPE_LABELS, CITIES, MOCK_EVENTS } from "@/data/mock-events"
 import type { EventType, City } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
-import { formatDateRangeLabel, TYPE_DOTS } from "@/lib/events"
+import { formatDateRangeLabel, formatEventDateRange, TYPE_DOTS } from "@/lib/events"
 
 const EVENT_TYPES: Array<{ value: EventType; label: string }> = Object.entries(
   EVENT_TYPE_LABELS,
@@ -52,10 +53,20 @@ export function MobileEventsFilterPill({
   const pillRef = useRef<HTMLButtonElement>(null)
   const [clipOrigin, setClipOrigin] = useState({ top: 0, right: 0, bottom: 0, left: 0 })
 
-  const suggestions = useMemo(() => {
+  const navigate = useNavigate()
+
+  const citySuggestions = useMemo(() => {
     if (!locationQuery.trim()) return CITIES.slice(0, 6)
     const q = locationQuery.toLowerCase()
     return CITIES.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 6)
+  }, [locationQuery])
+
+  const eventSuggestions = useMemo(() => {
+    const q = locationQuery.trim().toLowerCase()
+    if (!q) return []
+    return MOCK_EVENTS.filter((e) =>
+      e.title.toLowerCase().includes(q),
+    ).slice(0, 5)
   }, [locationQuery])
 
   useEffect(() => {
@@ -241,37 +252,101 @@ export function MobileEventsFilterPill({
                     <input
                       ref={locationInputRef}
                       type="text"
-                      placeholder="Search cities..."
+                      placeholder="Search events or cities..."
                       value={locationQuery}
                       onChange={(e) => {
                         onLocationQueryChange(e.target.value)
                         if (!e.target.value.trim()) onLocationClear()
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && suggestions.length > 0)
-                          onLocationSelect(suggestions[0])
+                        if (e.key === "Enter") {
+                          if (eventSuggestions.length > 0) {
+                            navigate(`/events/${eventSuggestions[0].id}`)
+                            closePanel()
+                          } else if (citySuggestions.length > 0) {
+                            onLocationSelect(citySuggestions[0])
+                          }
+                        }
                       }}
                       className="mb-2 h-10 w-full rounded-xl bg-secondary/50 px-4 text-sm transition-colors placeholder:text-muted-foreground/40 focus:bg-secondary focus:outline-none"
                     />
-                    <div className="flex flex-col gap-0.5">
-                      {suggestions.map((city) => (
-                        <button
-                          key={city.name}
-                          onClick={() => onLocationSelect(city)}
-                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
-                            activeLocation === city.name
-                              ? "bg-primary/8 text-primary font-medium"
-                              : "text-foreground hover:bg-secondary"
-                          }`}
-                        >
-                          <LocationIcon className="size-4" />
-                          {city.name}
-                          {activeLocation === city.name && (
-                            <CheckIcon className="ml-auto size-4 text-primary" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
+
+                    {/* Event results */}
+                    {eventSuggestions.length > 0 && (
+                      <div className="mb-2">
+                        <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Events
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          {eventSuggestions.map((event) => {
+                            const isPast = new Date((event.endDate ?? event.date) + "T23:59:59") < new Date()
+                            return (
+                              <button
+                                key={event.id}
+                                onClick={() => {
+                                  navigate(`/events/${event.id}`)
+                                  closePanel()
+                                }}
+                                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors text-foreground hover:bg-secondary"
+                              >
+                                <span className={`size-2 shrink-0 rounded-full ${TYPE_DOTS[event.type] ?? "bg-slate-400"}`} />
+                                <div className="min-w-0 flex-1">
+                                  <div className={`truncate text-[13px] font-medium ${isPast ? "text-muted-foreground" : ""}`}>
+                                    {event.title}
+                                  </div>
+                                  <div className="truncate text-[11px] text-muted-foreground">
+                                    {event.location} · {formatEventDateRange(event.date, event.endDate)}
+                                    {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wider opacity-60">Past</span>}
+                                  </div>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Divider */}
+                    {eventSuggestions.length > 0 && citySuggestions.length > 0 && (
+                      <div className="my-1 border-t border-border/40" />
+                    )}
+
+                    {/* City results */}
+                    {citySuggestions.length > 0 && (
+                      <div>
+                        {locationQuery.trim() && (
+                          <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Cities
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-0.5">
+                          {citySuggestions.map((city) => (
+                            <button
+                              key={city.name}
+                              onClick={() => onLocationSelect(city)}
+                              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
+                                activeLocation === city.name
+                                  ? "bg-primary/8 text-primary font-medium"
+                                  : "text-foreground hover:bg-secondary"
+                              }`}
+                            >
+                              <LocationIcon className="size-4" />
+                              {city.name}
+                              {activeLocation === city.name && (
+                                <CheckIcon className="ml-auto size-4 text-primary" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No results */}
+                    {eventSuggestions.length === 0 && citySuggestions.length === 0 && locationQuery.trim() && (
+                      <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                        No events or cities found
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

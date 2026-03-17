@@ -194,24 +194,43 @@ export function EventsSection({
               </div>
             ) : (
               <div className="px-5 py-4">
-                <h2 className="mb-4 text-sm font-semibold text-foreground">
-                  {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
-                  {showMap && mapBounds && (
-                    <span className="font-normal text-muted-foreground"> in this area</span>
-                  )}
-                  {filters.activeLocation && (
-                    <span className="font-normal text-muted-foreground">
-                      {" "}
-                      near {filters.activeLocation}
-                    </span>
-                  )}
-                  {filters.dateRange?.from && (
-                    <span className="font-normal text-muted-foreground">
-                      {" "}
-                      · {formatDateRangeLabel(filters.dateRange).toLowerCase()}
-                    </span>
-                  )}
-                </h2>
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <h2 className="text-sm font-semibold text-foreground">
+                    {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
+                    {showMap && mapBounds && (
+                      <span className="font-normal text-muted-foreground"> in this area</span>
+                    )}
+                    {filters.activeLocation && (
+                      <span className="font-normal text-muted-foreground">
+                        {" "}
+                        near {filters.activeLocation}
+                      </span>
+                    )}
+                    {filters.dateRange?.from && (
+                      <span className="font-normal text-muted-foreground">
+                        {" "}
+                        · {formatDateRangeLabel(filters.dateRange).toLowerCase()}
+                      </span>
+                    )}
+                  </h2>
+                  <label className="shrink-0 flex items-center gap-2 cursor-pointer select-none">
+                    <span className="text-[11px] font-medium text-muted-foreground">Show past events</span>
+                    <button
+                      role="switch"
+                      aria-checked={filters.includePast}
+                      onClick={() => actions.setIncludePast(!filters.includePast)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        filters.includePast ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none block size-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                          filters.includePast ? "translate-x-[18px]" : "translate-x-[3px]"
+                        }`}
+                      />
+                    </button>
+                  </label>
+                </div>
                 <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2 @5xl:grid-cols-3">
                   {visible.map((event) => (
                     <div
@@ -319,7 +338,6 @@ export function EventsSection({
           <EventMap
             events={filtered}
             searchCenter={filters.searchCenter}
-            radiusKm={filters.radius}
             activeEventId={activeEventId}
             onEventSelect={handleEventSelect}
             onBoundsChange={handleBoundsChange}

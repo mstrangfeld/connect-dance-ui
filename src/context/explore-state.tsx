@@ -12,6 +12,7 @@ export interface ExploreFilters {
   searchCenter: [number, number] | undefined
   dateRange: DateRange | undefined
   activeTypes: Set<EventType>
+  includePast: boolean
 }
 
 export interface ExploreMapView {
@@ -36,6 +37,7 @@ const DEFAULT_FILTERS: ExploreFilters = {
   searchCenter: undefined,
   dateRange: undefined,
   activeTypes: new Set(),
+  includePast: false,
 }
 
 function createDefaultSnapshot(): ExploreSnapshot {
