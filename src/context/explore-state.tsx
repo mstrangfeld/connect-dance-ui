@@ -7,6 +7,7 @@ import type { MapBounds } from "@/components/event-map"
 // ── State shape ──────────────────────────────────────────────────────────────
 
 export interface ExploreFilters {
+  searchQuery: string
   locationQuery: string
   activeLocation: string
   searchCenter: [number, number] | undefined
@@ -32,6 +33,7 @@ export interface ExploreSnapshot {
 // ── Default values ───────────────────────────────────────────────────────────
 
 const DEFAULT_FILTERS: ExploreFilters = {
+  searchQuery: "",
   locationQuery: "",
   activeLocation: "",
   searchCenter: undefined,
@@ -202,7 +204,7 @@ export function useExploreState(key = "events"): ExploreStateContextValue {
     () =>
       ctx.update(key, (prev) => ({
         ...prev,
-        filters: { ...DEFAULT_FILTERS, activeTypes: new Set() },
+        filters: { ...DEFAULT_FILTERS, searchQuery: "", activeTypes: new Set() },
       })),
     [ctx, key],
   )

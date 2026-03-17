@@ -5,6 +5,7 @@ import type { DateRange } from "react-day-picker"
 
 
 export interface EventFilters {
+  searchQuery: string
   locationQuery: string
   activeLocation: string
   searchCenter: [number, number] | undefined
@@ -14,6 +15,8 @@ export interface EventFilters {
 }
 
 export interface EventFilterActions {
+  setSearchQuery: (q: string) => void
+  clearSearch: () => void
   setLocationQuery: (q: string) => void
   selectLocation: (city: City) => void
   clearLocation: () => void
@@ -29,6 +32,7 @@ export interface UseEventFiltersReturn {
   actions: EventFilterActions
   filtered: DanceEvent[]
   sorted: DanceEvent[]
+  searchBounds: [[number, number], [number, number]] | undefined
   hasActiveFilters: boolean
 }
 
@@ -38,6 +42,7 @@ export function useEventFilters(options?: {
   initialState?: Partial<EventFilters>
 }): UseEventFiltersReturn {
   const init = options?.initialState
+  const [searchQuery, setSearchQueryState] = useState(init?.searchQuery ?? "")
   const [locationQuery, setLocationQuery] = useState(init?.locationQuery ?? "")
   const [activeLocation, setActiveLocation] = useState(init?.activeLocation ?? "")
   const [searchCenter, setSearchCenter] = useState<
@@ -59,10 +64,25 @@ export function useEventFilters(options?: {
     [options?.onActiveTypesChange],
   )
 
+  const setSearchQuery = useCallback((q: string) => {
+    setSearchQueryState(q)
+    // When typing in the unified search, clear the city selection
+    if (q.trim()) {
+      setActiveLocation("")
+      setSearchCenter(undefined)
+      setLocationQuery("")
+    }
+  }, [])
+
+  const clearSearch = useCallback(() => {
+    setSearchQueryState("")
+  }, [])
+
   const selectLocation = useCallback((city: City) => {
     setLocationQuery(city.name)
     setActiveLocation(city.name)
     setSearchCenter([city.lat, city.lng])
+    setSearchQueryState(city.name)
   }, [])
 
   const clearLocation = useCallback(() => {
@@ -84,6 +104,7 @@ export function useEventFilters(options?: {
   const clearAll = useCallback(() => {
     setActiveTypes(new Set())
     clearLocation()
+    setSearchQueryState("")
     setDateRange(undefined)
     setIncludePast(false)
   }, [setActiveTypes, clearLocation])
@@ -118,9 +139,24 @@ export function useEventFilters(options?: {
         to.setHours(23, 59, 59, 999)
         if (eventDate < from || eventDate > to) return false
       }
+      // Text search filtering
+      if (searchQuery.trim() && !activeLocation) {
+        const q = searchQuery.trim().toLowerCase()
+        const haystack = [
+          e.title,
+          e.location,
+          e.city,
+          e.venue,
+          e.organizer,
+          ...e.tags,
+        ]
+          .join(" ")
+          .toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
       return true
     })
-  }, [activeTypes, dateRange, includePast])
+  }, [activeTypes, dateRange, includePast, searchQuery, activeLocation])
 
   const sorted = useMemo(() => {
     if (!includePast) {
@@ -136,11 +172,39 @@ export function useEventFilters(options?: {
     ]
   }, [filtered, includePast])
 
+  // Compute bounding box from filtered events when text search is active without a city
+  const searchBounds = useMemo<
+    [[number, number], [number, number]] | undefined
+  >(() => {
+    if (!searchQuery.trim() || activeLocation || filtered.length === 0) return undefined
+    let south = 90,
+      north = -90,
+      west = 180,
+      east = -180
+    for (const e of filtered) {
+      if (e.lat < south) south = e.lat
+      if (e.lat > north) north = e.lat
+      if (e.lng < west) west = e.lng
+      if (e.lng > east) east = e.lng
+    }
+    // Add padding
+    const latPad = Math.max((north - south) * 0.15, 0.5)
+    const lngPad = Math.max((east - west) * 0.15, 0.5)
+    return [
+      [south - latPad, west - lngPad],
+      [north + latPad, east + lngPad],
+    ]
+  }, [searchQuery, activeLocation, filtered])
+
   const hasActiveFilters =
-    activeTypes.size > 0 || activeLocation !== "" || !!dateRange?.from
+    activeTypes.size > 0 ||
+    activeLocation !== "" ||
+    !!dateRange?.from ||
+    searchQuery.trim() !== ""
 
   return {
     filters: {
+      searchQuery,
       locationQuery,
       activeLocation,
       searchCenter,
@@ -149,6 +213,8 @@ export function useEventFilters(options?: {
       includePast,
     },
     actions: {
+      setSearchQuery,
+      clearSearch,
       setLocationQuery: handleLocationQueryChange,
       selectLocation,
       clearLocation,
@@ -160,6 +226,7 @@ export function useEventFilters(options?: {
     },
     filtered,
     sorted,
+    searchBounds,
     hasActiveFilters,
   }
 }

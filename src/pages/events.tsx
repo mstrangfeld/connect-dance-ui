@@ -6,6 +6,8 @@ import { MobileEventsFilterPill } from "@/components/mobile-events-filter-pill"
 import { useEventFilters } from "@/hooks/use-event-filters"
 import { useExploreState } from "@/context/explore-state"
 import type { City } from "@/data/mock-events"
+import type { SearchSuggestion } from "@/lib/search-suggestions"
+import { useNavigate } from "react-router"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,11 +46,12 @@ function isInBounds(lat: number, lng: number, bounds: MapBounds) {
 
 function MobileEventsView() {
   const explore = useExploreState()
+  const navigate = useNavigate()
 
   // Hydrate local state from the persistent context
   const initial = explore.getSnapshot()
 
-  const { filters, actions, filtered } = useEventFilters({
+  const { filters, actions, filtered, searchBounds } = useEventFilters({
     initialState: initial.filters,
   })
   const [activeEventId, setActiveEventId] = useState<string | undefined>(initial.activeEventId)
@@ -107,9 +110,6 @@ function MobileEventsView() {
   const floorRef = useRef<HTMLDivElement>(null)
   const spacerHeightVal = useRef(0)
 
-  // Measure spacer height once on mount using the initial viewport.
-  // We intentionally do NOT re-measure on resize to avoid layout jumps
-  // when Safari's toolbar appears/disappears.
   useEffect(() => {
     spacerHeightVal.current =
       window.innerHeight - PILL_AREA_HEIGHT - NAV_HEIGHT - PEEK_HEIGHT
@@ -128,9 +128,6 @@ function MobileEventsView() {
       )
       bd.style.opacity = String(progress)
 
-      // Position the floor's top edge at the midpoint of the panel.
-      // The floor is fixed to the bottom, sits between the map (z:10)
-      // and the panel (z:20), covering the map below the panel.
       const panel = panelRef.current
       const floor = floorRef.current
       if (panel && floor) {
@@ -151,15 +148,35 @@ function MobileEventsView() {
     explore.selectLocation(city)
   }, [actions, explore])
 
-  const handleClearLocation = useCallback(() => {
-    actions.clearLocation()
-    explore.clearLocation()
-  }, [actions, explore])
-
   const handleClearAll = useCallback(() => {
     actions.clearAll()
     explore.clearAll()
   }, [actions, explore])
+
+  const handleSuggestionSelect = useCallback(
+    (suggestion: SearchSuggestion) => {
+      if (suggestion.type === "event" && suggestion.event) {
+        navigate(`/events/${suggestion.event.id}`)
+        return
+      }
+      if (suggestion.type === "city" && suggestion.city) {
+        handleSelectLocation(suggestion.city)
+      } else if (
+        (suggestion.type === "venue" || suggestion.type === "organizer") &&
+        suggestion.filterValue
+      ) {
+        actions.setSearchQuery(suggestion.filterValue)
+        explore.updateFilters({ searchQuery: suggestion.filterValue })
+      }
+    },
+    [actions, explore, navigate, handleSelectLocation],
+  )
+
+  // Compute filter count for badge
+  const filterCount =
+    (filters.dateRange?.from ? 1 : 0) +
+    (filters.activeTypes.size > 0 ? 1 : 0) +
+    (filters.includePast ? 1 : 0)
 
   return (
     <>
@@ -168,6 +185,7 @@ function MobileEventsView() {
         <EventMap
           events={filtered}
           searchCenter={filters.searchCenter}
+          searchBounds={searchBounds}
           activeEventId={activeEventId}
           onEventSelect={setActiveEventId}
           onBoundsChange={handleBoundsChange}
@@ -187,9 +205,7 @@ function MobileEventsView() {
         aria-hidden
       />
 
-      {/* Floor — fixed to viewport bottom, z:15 sits between map and
-          panel. Its top edge tracks the panel's midpoint so it covers
-          the map below the panel without affecting scroll. */}
+      {/* Floor */}
       <div
         ref={floorRef}
         className="fixed bottom-0 left-0 right-0 bg-background md:hidden"
@@ -206,10 +222,15 @@ function MobileEventsView() {
           <div className="h-1 w-10 rounded-full bg-border" />
         </div>
 
-        <div className="flex items-center justify-between px-4 py-2">
-          <p className="text-[13px] font-semibold">
-            {visibleEvents.length} event{visibleEvents.length !== 1 ? "s" : ""}{" "}
-            <span className="font-normal text-muted-foreground">in this area</span>
+        <div className="flex items-center justify-between gap-4 px-4 py-2">
+          <p className="min-w-0 text-[13px] font-semibold">
+            {visibleEvents.length} event{visibleEvents.length !== 1 ? "s" : ""}
+            {filters.searchQuery && !filters.activeLocation && (
+              <span className="font-normal text-muted-foreground">
+                {" "}matching &ldquo;{filters.searchQuery}&rdquo;
+              </span>
+            )}
+            <span className="font-normal text-muted-foreground"> in this area</span>
           </p>
           <label className="shrink-0 flex items-center gap-2 cursor-pointer select-none">
             <span className="text-[11px] font-medium text-muted-foreground">Show past</span>
@@ -239,7 +260,7 @@ function MobileEventsView() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Zoom out or pan the map to see more events.
               </p>
-              {(filters.activeTypes.size > 0 || filters.activeLocation || filters.dateRange?.from) && (
+              {(filters.activeTypes.size > 0 || filters.activeLocation || filters.dateRange?.from || filters.searchQuery) && (
                 <button
                   onClick={handleClearAll}
                   className="mt-3 text-[13px] font-medium text-primary"
@@ -283,14 +304,16 @@ function MobileEventsView() {
         />
         <div className="relative mx-4 mt-3 pointer-events-auto">
           <MobileEventsFilterPill
-            locationQuery={filters.locationQuery}
-            onLocationQueryChange={(q) => {
-              actions.setLocationQuery(q)
-              explore.updateFilters({ locationQuery: q })
+            searchQuery={filters.searchQuery}
+            onSearchQueryChange={(q: string) => {
+              actions.setSearchQuery(q)
+              explore.updateFilters({ searchQuery: q })
             }}
-            activeLocation={filters.activeLocation}
-            onLocationSelect={handleSelectLocation}
-            onLocationClear={handleClearLocation}
+            onSuggestionSelect={handleSuggestionSelect}
+            onClearSearch={() => {
+              actions.clearSearch()
+              explore.updateFilters({ searchQuery: "" })
+            }}
             dateRange={filters.dateRange}
             onDateRangeChange={(range) => {
               actions.setDateRange(range)
@@ -301,8 +324,15 @@ function MobileEventsView() {
               actions.toggleType(type)
               explore.toggleType(type)
             }}
+            includePast={filters.includePast}
+            onIncludePastChange={(include) => {
+              actions.setIncludePast(include)
+              explore.updateFilters({ includePast: include })
+            }}
             onClearAll={handleClearAll}
             resultCount={visibleEvents.length}
+            filterCount={filterCount}
+            activeLocation={filters.activeLocation}
           />
         </div>
       </div>

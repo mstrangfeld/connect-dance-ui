@@ -160,6 +160,45 @@ export function UserIcon({ className }: IconProps) {
   )
 }
 
+export function FilterIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={cn("size-[18px]", className)}
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    >
+      <path d="M4 8h16" />
+      <path d="M6 16h12" />
+      <path d="M8 12h8" />
+    </svg>
+  )
+}
+
+export function VenueIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={cn("size-4", className)}
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 21h18" />
+      <path d="M5 21V7l8-4v18" />
+      <path d="M19 21V11l-6-4" />
+      <path d="M9 9v.01" />
+      <path d="M9 12v.01" />
+      <path d="M9 15v.01" />
+      <path d="M9 18v.01" />
+    </svg>
+  )
+}
+
 export function PlusIcon({ className }: IconProps) {
   return (
     <svg

@@ -1,73 +1,88 @@
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useNavigate } from "react-router"
 import { Calendar } from "@/components/ui/calendar"
-import { XIcon, ChevronIcon, LocationIcon, CheckIcon } from "@/components/icons"
-import { EVENT_TYPE_LABELS, CITIES, MOCK_EVENTS } from "@/data/mock-events"
-import type { EventType, City } from "@/data/mock-events"
+import { XIcon, ChevronIcon, SearchIcon, FilterIcon, LocationIcon, VenueIcon, UserIcon, CheckIcon } from "@/components/icons"
+import { EVENT_TYPE_LABELS } from "@/data/mock-events"
+import type { EventType } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
-import { formatDateRangeLabel, formatEventDateRange, TYPE_DOTS } from "@/lib/events"
+import { formatEventDateRange, TYPE_DOTS } from "@/lib/events"
+import { getSearchSuggestions, type SearchSuggestion } from "@/lib/search-suggestions"
 
 const EVENT_TYPES: Array<{ value: EventType; label: string }> = Object.entries(
   EVENT_TYPE_LABELS,
 ).map(([value, label]) => ({ value: value as EventType, label }))
 
-type ExpandedSection = "location" | "date" | "type" | null
+type ExpandedSection = "date" | "type" | null
 
 export interface MobileEventsFilterPillProps {
-  locationQuery: string
-  onLocationQueryChange: (q: string) => void
-  activeLocation: string
-  onLocationSelect: (city: City) => void
-  onLocationClear: () => void
+  searchQuery: string
+  onSearchQueryChange: (q: string) => void
+  onSuggestionSelect: (suggestion: SearchSuggestion) => void
+  onClearSearch: () => void
   dateRange: DateRange | undefined
   onDateRangeChange: (range: DateRange | undefined) => void
   activeTypes: Set<EventType>
   onTypeToggle: (type: EventType) => void
+  includePast: boolean
+  onIncludePastChange: (include: boolean) => void
   onClearAll: () => void
   resultCount: number
+  filterCount: number
   embedded?: boolean
   onNavigateToEvents?: () => void
+  activeLocation: string
 }
 
 export function MobileEventsFilterPill({
-  locationQuery,
-  onLocationQueryChange,
-  activeLocation,
-  onLocationSelect,
-  onLocationClear,
+  searchQuery,
+  onSearchQueryChange,
+  onSuggestionSelect,
+  onClearSearch,
   dateRange,
   onDateRangeChange,
   activeTypes,
   onTypeToggle,
+  includePast,
+  onIncludePastChange,
   onClearAll,
   resultCount,
+  filterCount,
   embedded,
   onNavigateToEvents,
+  activeLocation,
 }: MobileEventsFilterPillProps) {
-  const [panelOpen, setPanelOpen] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false)
   const [animState, setAnimState] = useState<"closed" | "entering" | "open" | "exiting">("closed")
-  const [expandedSection, setExpandedSection] =
-    useState<ExpandedSection>("location")
-  const locationInputRef = useRef<HTMLInputElement>(null)
-  const pillRef = useRef<HTMLButtonElement>(null)
+  const [expandedSection, setExpandedSection] = useState<ExpandedSection>("date")
+  const inputRef = useRef<HTMLInputElement>(null)
+  const pillRef = useRef<HTMLDivElement>(null)
   const [clipOrigin, setClipOrigin] = useState({ top: 0, right: 0, bottom: 0, left: 0 })
 
   const navigate = useNavigate()
 
-  const citySuggestions = useMemo(() => {
-    if (!locationQuery.trim()) return CITIES.slice(0, 6)
-    const q = locationQuery.toLowerCase()
-    return CITIES.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 6)
-  }, [locationQuery])
+  const suggestions = useMemo(
+    () => getSearchSuggestions(searchQuery),
+    [searchQuery],
+  )
 
-  const eventSuggestions = useMemo(() => {
-    const q = locationQuery.trim().toLowerCase()
-    if (!q) return []
-    return MOCK_EVENTS.filter((e) =>
-      e.title.toLowerCase().includes(q),
-    ).slice(0, 5)
-  }, [locationQuery])
+  // Reset highlight when suggestions change
+  useEffect(() => {
+    setHighlightedIndex(-1)
+  }, [suggestions])
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (pillRef.current && !pillRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
 
   useEffect(() => {
     if (animState === "entering" || animState === "open") document.body.style.overflow = "hidden"
@@ -77,17 +92,20 @@ export function MobileEventsFilterPill({
     }
   }, [animState])
 
-  const closePanelRef = useRef(closePanel)
-  closePanelRef.current = closePanel
+  const closePanelRef = useRef(closeFilterPanel)
+  closePanelRef.current = closeFilterPanel
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closePanelRef.current()
+      if (e.key === "Escape") {
+        closePanelRef.current()
+        setShowSuggestions(false)
+      }
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
   }, [])
 
-  function openPanel(section: ExpandedSection = "location") {
+  function openFilterPanel() {
     // Capture pill position for clip-path origin
     if (pillRef.current) {
       const rect = pillRef.current.getBoundingClientRect()
@@ -100,99 +118,143 @@ export function MobileEventsFilterPill({
         left: rect.left,
       })
     }
-    setExpandedSection(section)
-    setPanelOpen(true)
+    setShowSuggestions(false)
+    setExpandedSection("date")
+    setFilterPanelOpen(true)
     setAnimState("entering")
-    // Trigger reflow then transition to open
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         setAnimState("open")
       })
     })
-    if (section === "location")
-      setTimeout(() => locationInputRef.current?.focus(), 100)
   }
 
-  function closePanel() {
+  function closeFilterPanel() {
     setAnimState("exiting")
     setTimeout(() => {
-      setPanelOpen(false)
+      setFilterPanelOpen(false)
       setAnimState("closed")
     }, 350)
   }
 
   function toggleSection(section: ExpandedSection) {
     setExpandedSection((prev) => (prev === section ? null : section))
-    if (section === "location")
-      setTimeout(() => locationInputRef.current?.focus(), 100)
   }
 
-  const hasActiveFilters =
-    activeTypes.size > 0 || activeLocation !== "" || !!dateRange?.from
-  const filterCount =
-    (activeLocation ? 1 : 0) +
-    (dateRange?.from ? 1 : 0) +
-    (activeTypes.size > 0 ? 1 : 0)
-  const dateLabel = formatDateRangeLabel(dateRange)
-  const typeLabel =
-    activeTypes.size === 0
-      ? "All types"
-      : activeTypes.size === 1
-        ? EVENT_TYPE_LABELS[[...activeTypes][0]]
-        : `${activeTypes.size} types`
+  const handleSuggestionClick = useCallback((suggestion: SearchSuggestion) => {
+    if (suggestion.type === "event" && suggestion.event) {
+      navigate(`/events/${suggestion.event.id}`)
+      setShowSuggestions(false)
+      return
+    }
+    onSuggestionSelect(suggestion)
+    setShowSuggestions(false)
+  }, [navigate, onSuggestionSelect])
+
+  const hasActiveFilters = filterCount > 0 || searchQuery.trim() !== ""
 
   return (
     <>
-      {/* Pill trigger button */}
-      <button
-        ref={pillRef}
-        onClick={() => openPanel("location")}
-        className="flex w-full items-center gap-3 rounded-full border border-border/60 bg-card px-4 py-2.5 shadow-sm text-left transition-colors hover:bg-secondary/50 active:bg-secondary"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          className="size-[18px] shrink-0 text-muted-foreground/50"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="11" cy="11" r="8" />
-          <path d="M21 21l-4.35-4.35" />
-        </svg>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[13px] font-bold leading-none text-foreground">
-            {activeLocation || "Anywhere"}
-          </span>
-          <span className="truncate text-[11px] leading-none text-slate-500 dark:text-slate-400">
-            {dateLabel} · {typeLabel}
-          </span>
-        </div>
-        {hasActiveFilters ? (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
-            {filterCount}
-          </span>
-        ) : (
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="size-[14px]"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      {/* Search pill — directly typeable */}
+      <div ref={pillRef} className="relative">
+        <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-2 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-primary/15">
+          <SearchIcon className="shrink-0 text-muted-foreground/50 size-[16px]" />
+          <input
+            ref={inputRef}
+            type="search"
+            enterKeyHint="search"
+            placeholder="Search events, cities, venues..."
+            value={searchQuery}
+            onChange={(e) => {
+              onSearchQueryChange(e.target.value)
+              setShowSuggestions(true)
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onKeyDown={(e) => {
+              if (!showSuggestions || suggestions.length === 0) {
+                if (e.key === "Enter") {
+                  setShowSuggestions(false)
+                  inputRef.current?.blur()
+                }
+                return
+              }
+              switch (e.key) {
+                case "ArrowDown":
+                  e.preventDefault()
+                  setHighlightedIndex((prev) =>
+                    prev < suggestions.length - 1 ? prev + 1 : prev,
+                  )
+                  break
+                case "ArrowUp":
+                  e.preventDefault()
+                  setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1))
+                  break
+                case "Enter":
+                  if (highlightedIndex >= 0) {
+                    e.preventDefault()
+                    handleSuggestionClick(suggestions[highlightedIndex])
+                  } else {
+                    setShowSuggestions(false)
+                  }
+                  inputRef.current?.blur()
+                  break
+              }
+            }}
+            className="h-7 flex-1 min-w-0 bg-transparent text-base font-medium text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => {
+                onClearSearch()
+                inputRef.current?.focus()
+              }}
+              className="shrink-0 rounded-full p-0.5 text-muted-foreground/40 transition-colors hover:text-foreground"
+              aria-label="Clear search"
             >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-          </span>
+              <XIcon className="size-3" />
+            </button>
+          )}
+          <button
+            onClick={openFilterPanel}
+            className="relative flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary"
+            aria-label="Open filters"
+          >
+            <FilterIcon className="size-[16px]" />
+            {filterCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                {filterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Suggestions dropdown — flat ranked list */}
+        {showSuggestions && suggestions.length > 0 && (
+          <div
+            className="absolute top-full left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-2xl border border-border/60 bg-popover shadow-xl shadow-slate-900/8"
+            style={{ maxHeight: "50vh" }}
+            role="listbox"
+            aria-label="Search suggestions"
+          >
+            <div className="max-h-[50vh] overflow-y-auto p-2">
+              {suggestions.map((s, i) => (
+                <MobileSuggestionRow
+                  key={`${s.type}-${s.label}-${i}`}
+                  suggestion={s}
+                  index={i}
+                  isHighlighted={i === highlightedIndex}
+                  activeLocation={activeLocation}
+                  onSelect={handleSuggestionClick}
+                  onHover={setHighlightedIndex}
+                />
+              ))}
+            </div>
+          </div>
         )}
-      </button>
+      </div>
 
       {/* Full-screen filter panel */}
-      {panelOpen &&
+      {filterPanelOpen &&
         createPortal(
           <div
             className="fixed inset-0 z-[60] flex flex-col bg-background"
@@ -206,7 +268,7 @@ export function MobileEventsFilterPill({
             {/* Header */}
             <div className="flex shrink-0 items-center gap-4 border-b border-border/50 px-4 py-4">
               <button
-                onClick={closePanel}
+                onClick={closeFilterPanel}
                 className="flex size-8 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary"
                 aria-label="Close filters"
               >
@@ -229,128 +291,6 @@ export function MobileEventsFilterPill({
 
             {/* Filter sections */}
             <div className="flex-1 overflow-y-auto divide-y divide-border/50">
-              {/* WHERE */}
-              <div>
-                <button
-                  onClick={() => toggleSection("location")}
-                  className="flex w-full items-center justify-between px-5 py-4 text-left"
-                >
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Where
-                    </div>
-                    <div
-                      className={`mt-0.5 text-[15px] font-medium ${activeLocation ? "text-foreground" : "text-muted-foreground"}`}
-                    >
-                      {activeLocation || "Anywhere"}
-                    </div>
-                  </div>
-                  <ChevronIcon expanded={expandedSection === "location"} />
-                </button>
-                {expandedSection === "location" && (
-                  <div className="px-5 pb-5">
-                    <input
-                      ref={locationInputRef}
-                      type="text"
-                      placeholder="Search events or cities..."
-                      value={locationQuery}
-                      onChange={(e) => {
-                        onLocationQueryChange(e.target.value)
-                        if (!e.target.value.trim()) onLocationClear()
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          if (eventSuggestions.length > 0) {
-                            navigate(`/events/${eventSuggestions[0].id}`)
-                            closePanel()
-                          } else if (citySuggestions.length > 0) {
-                            onLocationSelect(citySuggestions[0])
-                          }
-                        }
-                      }}
-                      className="mb-2 h-10 w-full rounded-xl bg-secondary/50 px-4 text-sm transition-colors placeholder:text-muted-foreground/40 focus:bg-secondary focus:outline-none"
-                    />
-
-                    {/* Event results */}
-                    {eventSuggestions.length > 0 && (
-                      <div className="mb-2">
-                        <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Events
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          {eventSuggestions.map((event) => {
-                            const isPast = new Date((event.endDate ?? event.date) + "T23:59:59") < new Date()
-                            return (
-                              <button
-                                key={event.id}
-                                onClick={() => {
-                                  navigate(`/events/${event.id}`)
-                                  closePanel()
-                                }}
-                                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors text-foreground hover:bg-secondary"
-                              >
-                                <span className={`size-2 shrink-0 rounded-full ${TYPE_DOTS[event.type] ?? "bg-slate-400"}`} />
-                                <div className="min-w-0 flex-1">
-                                  <div className={`truncate text-[13px] font-medium ${isPast ? "text-muted-foreground" : ""}`}>
-                                    {event.title}
-                                  </div>
-                                  <div className="truncate text-[11px] text-muted-foreground">
-                                    {event.location} · {formatEventDateRange(event.date, event.endDate)}
-                                    {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wider opacity-60">Past</span>}
-                                  </div>
-                                </div>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Divider */}
-                    {eventSuggestions.length > 0 && citySuggestions.length > 0 && (
-                      <div className="my-1 border-t border-border/40" />
-                    )}
-
-                    {/* City results */}
-                    {citySuggestions.length > 0 && (
-                      <div>
-                        {locationQuery.trim() && (
-                          <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            Cities
-                          </div>
-                        )}
-                        <div className="flex flex-col gap-0.5">
-                          {citySuggestions.map((city) => (
-                            <button
-                              key={city.name}
-                              onClick={() => onLocationSelect(city)}
-                              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
-                                activeLocation === city.name
-                                  ? "bg-primary/8 text-primary font-medium"
-                                  : "text-foreground hover:bg-secondary"
-                              }`}
-                            >
-                              <LocationIcon className="size-4" />
-                              {city.name}
-                              {activeLocation === city.name && (
-                                <CheckIcon className="ml-auto size-4 text-primary" />
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* No results */}
-                    {eventSuggestions.length === 0 && citySuggestions.length === 0 && locationQuery.trim() && (
-                      <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                        No events or cities found
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* WHEN */}
               <div>
                 <button
@@ -364,7 +304,7 @@ export function MobileEventsFilterPill({
                     <div
                       className={`mt-0.5 text-[15px] font-medium ${dateRange?.from ? "text-foreground" : "text-muted-foreground"}`}
                     >
-                      {dateLabel}
+                      {dateRange?.from ? formatDateRangeLabel(dateRange) : "Any date"}
                     </div>
                   </div>
                   <ChevronIcon expanded={expandedSection === "date"} />
@@ -418,7 +358,11 @@ export function MobileEventsFilterPill({
                     <div
                       className={`mt-0.5 text-[15px] font-medium ${activeTypes.size > 0 ? "text-foreground" : "text-muted-foreground"}`}
                     >
-                      {typeLabel}
+                      {activeTypes.size === 0
+                        ? "All types"
+                        : activeTypes.size === 1
+                          ? EVENT_TYPE_LABELS[[...activeTypes][0]]
+                          : `${activeTypes.size} types`}
                     </div>
                   </div>
                   <ChevronIcon expanded={expandedSection === "type"} />
@@ -456,6 +400,27 @@ export function MobileEventsFilterPill({
                   </div>
                 )}
               </div>
+
+              {/* Show past events */}
+              <div className="px-5 py-4">
+                <label className="flex items-center justify-between cursor-pointer select-none">
+                  <span className="text-[15px] font-medium text-foreground">Show past events</span>
+                  <button
+                    role="switch"
+                    aria-checked={includePast}
+                    onClick={() => onIncludePastChange(!includePast)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      includePast ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none block size-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                        includePast ? "translate-x-[18px]" : "translate-x-[3px]"
+                      }`}
+                    />
+                  </button>
+                </label>
+              </div>
             </div>
 
             {/* Footer */}
@@ -469,7 +434,7 @@ export function MobileEventsFilterPill({
                 </button>
               ) : (
                 <button
-                  onClick={closePanel}
+                  onClick={closeFilterPanel}
                   className="flex w-full items-center justify-center rounded-2xl bg-primary py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 active:opacity-80"
                 >
                   Show {resultCount} result{resultCount !== 1 ? "s" : ""}
@@ -480,5 +445,110 @@ export function MobileEventsFilterPill({
           document.body,
         )}
     </>
+  )
+}
+
+function formatDateRangeLabel(range: DateRange | undefined): string {
+  if (!range?.from) return "Any date"
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  if (!range.to || range.from.toDateString() === range.to.toDateString())
+    return fmt(range.from)
+  return `${fmt(range.from)} – ${fmt(range.to)}`
+}
+
+function MobileSuggestionIcon({ type }: { type: SearchSuggestion["type"] }) {
+  switch (type) {
+    case "city":
+      return <LocationIcon className="size-4" />
+    case "venue":
+      return <VenueIcon className="size-4 text-muted-foreground/50" />
+    case "organizer":
+      return <UserIcon className="size-4 text-muted-foreground/50" />
+    case "event":
+      return null
+  }
+}
+
+function MobileSuggestionRow({
+  suggestion,
+  index,
+  isHighlighted,
+  activeLocation,
+  onSelect,
+  onHover,
+}: {
+  suggestion: SearchSuggestion
+  index: number
+  isHighlighted: boolean
+  activeLocation: string
+  onSelect: (s: SearchSuggestion) => void
+  onHover: (i: number) => void
+}) {
+  const s = suggestion
+
+  if (s.type === "event" && s.event) {
+    const event = s.event
+    const isPast = new Date((event.endDate ?? event.date) + "T23:59:59") < new Date()
+    return (
+      <button
+        id={`mobile-suggestion-${index}`}
+        role="option"
+        aria-selected={isHighlighted}
+        onClick={() => onSelect(s)}
+        onMouseEnter={() => onHover(index)}
+        className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors text-foreground ${
+          isHighlighted ? "bg-secondary" : "hover:bg-secondary"
+        }`}
+      >
+        <span className={`size-2 shrink-0 rounded-full ${TYPE_DOTS[event.type] ?? "bg-slate-400"}`} />
+        <div className="min-w-0 flex-1">
+          <div className={`truncate text-[13px] font-medium ${isPast ? "text-muted-foreground" : ""}`}>
+            {event.title}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {event.location} · {formatEventDateRange(event.date, event.endDate)}
+            {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wider opacity-60">Past</span>}
+          </div>
+        </div>
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+          Event
+        </span>
+      </button>
+    )
+  }
+
+  const isActiveCity = s.type === "city" && activeLocation === s.label
+
+  return (
+    <button
+      id={`mobile-suggestion-${index}`}
+      role="option"
+      aria-selected={isHighlighted}
+      onClick={() => onSelect(s)}
+      onMouseEnter={() => onHover(index)}
+      className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
+        isActiveCity
+          ? "bg-primary/8 text-primary font-medium"
+          : isHighlighted
+            ? "bg-secondary text-foreground"
+            : "text-foreground hover:bg-secondary"
+      }`}
+    >
+      <MobileSuggestionIcon type={s.type} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] font-medium">{s.label}</div>
+        {s.sublabel && (
+          <div className="truncate text-[11px] text-muted-foreground">{s.sublabel}</div>
+        )}
+      </div>
+      {isActiveCity ? (
+        <CheckIcon className="ml-auto size-4 shrink-0 text-primary" />
+      ) : (
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+          {s.type === "city" ? "City" : s.type === "venue" ? "Venue" : "Organizer"}
+        </span>
+      )}
+    </button>
   )
 }

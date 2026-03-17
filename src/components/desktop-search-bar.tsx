@@ -1,41 +1,44 @@
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router"
 import { Calendar } from "@/components/ui/calendar"
-import { XIcon, LocationIcon, CheckIcon, SearchIcon, MapIcon } from "@/components/icons"
-import { CITIES, MOCK_EVENTS, EVENT_TYPE_LABELS } from "@/data/mock-events"
-import type { EventType, City, DanceEvent } from "@/data/mock-events"
+import { XIcon, SearchIcon, MapIcon, LocationIcon, VenueIcon, UserIcon, CheckIcon } from "@/components/icons"
+import { EVENT_TYPE_LABELS } from "@/data/mock-events"
+import type { EventType } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
 import { formatDateRangeLabel, formatEventDateRange, TYPE_DOTS } from "@/lib/events"
-
-type OpenPanel = "location" | "date" | "type" | null
+import { getSearchSuggestions, type SearchSuggestion } from "@/lib/search-suggestions"
 
 const EVENT_TYPES: Array<{ value: EventType; label: string }> = Object.entries(
   EVENT_TYPE_LABELS,
 ).map(([value, label]) => ({ value: value as EventType, label }))
 
+type OpenPanel = "search" | "date" | "type" | null
+
 interface DesktopSearchBarProps {
-  locationQuery: string
-  onLocationQueryChange: (q: string) => void
-  activeLocation: string
-  onLocationSelect: (city: City) => void
-  onLocationClear: () => void
+  searchQuery: string
+  onSearchQueryChange: (q: string) => void
+  onSuggestionSelect: (suggestion: SearchSuggestion) => void
+  onClearSearch: () => void
   dateRange: DateRange | undefined
   onDateRangeChange: (range: DateRange | undefined) => void
   activeTypes: Set<EventType>
   onTypeToggle: (type: EventType) => void
   onTypesReset: () => void
+  includePast: boolean
+  onIncludePastChange: (include: boolean) => void
+  filterCount: number
   embedded?: boolean
   showMap?: boolean
   onToggleMap?: () => void
   onNavigateToEvents?: () => void
+  activeLocation: string
 }
 
 export function DesktopSearchBar({
-  locationQuery,
-  onLocationQueryChange,
-  activeLocation,
-  onLocationSelect,
-  onLocationClear,
+  searchQuery,
+  onSearchQueryChange,
+  onSuggestionSelect,
+  onClearSearch,
   dateRange,
   onDateRangeChange,
   activeTypes,
@@ -45,10 +48,13 @@ export function DesktopSearchBar({
   showMap,
   onToggleMap,
   onNavigateToEvents,
+  activeLocation,
 }: DesktopSearchBarProps) {
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const searchBarRef = useRef<HTMLDivElement>(null)
-  const locationInputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -67,35 +73,65 @@ export function DesktopSearchBar({
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  const navigate = useNavigate()
+  const suggestions = useMemo(
+    () => getSearchSuggestions(searchQuery),
+    [searchQuery],
+  )
 
-  const citySuggestions = useMemo(() => {
-    if (!locationQuery.trim()) return CITIES.slice(0, 6)
-    const q = locationQuery.toLowerCase()
-    return CITIES.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 6)
-  }, [locationQuery])
+  // Reset highlight when suggestions change
+  useEffect(() => {
+    setHighlightedIndex(-1)
+  }, [suggestions])
 
-  const eventSuggestions = useMemo(() => {
-    const q = locationQuery.trim().toLowerCase()
-    if (!q) return []
-    return MOCK_EVENTS.filter((e) =>
-      e.title.toLowerCase().includes(q),
-    ).slice(0, 5)
-  }, [locationQuery])
-
-  function selectLocation(city: City) {
-    onLocationSelect(city)
+  const handleSuggestionClick = useCallback((suggestion: SearchSuggestion) => {
+    if (suggestion.type === "event" && suggestion.event) {
+      navigate(`/events/${suggestion.event.id}`)
+      setOpenPanel(null)
+      return
+    }
+    onSuggestionSelect(suggestion)
     setOpenPanel(null)
+  }, [navigate, onSuggestionSelect])
+
+  function handleInputKeyDown(e: React.KeyboardEvent) {
+    if (openPanel !== "search" || suggestions.length === 0) {
+      if (e.key === "Enter") {
+        // Just close — the typed text is already the search query
+        setOpenPanel(null)
+      }
+      return
+    }
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault()
+        setHighlightedIndex((prev) =>
+          prev < suggestions.length - 1 ? prev + 1 : prev,
+        )
+        break
+      case "ArrowUp":
+        e.preventDefault()
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1))
+        break
+      case "Enter":
+        if (highlightedIndex >= 0) {
+          e.preventDefault()
+          handleSuggestionClick(suggestions[highlightedIndex])
+        } else {
+          // No suggestion highlighted — submit raw query text
+          setOpenPanel(null)
+        }
+        break
+    }
   }
 
   function togglePanel(panel: OpenPanel) {
     setOpenPanel((prev) => (prev === panel ? null : panel))
-    if (panel === "location") {
-      setTimeout(() => locationInputRef.current?.focus(), 0)
+    if (panel === "search") {
+      setTimeout(() => inputRef.current?.focus(), 0)
     }
   }
 
-  const locationLabel = activeLocation || "Anywhere"
   const dateLabel = formatDateRangeLabel(dateRange)
   const typeLabel =
     activeTypes.size === 0
@@ -107,40 +143,53 @@ export function DesktopSearchBar({
   return (
     <div ref={searchBarRef} className="relative mx-auto max-w-2xl hidden md:block">
       <div
-        className="flex items-stretch rounded-full border border-border/60 bg-card shadow-sm transition-shadow has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-primary/15"
+        className="flex items-stretch rounded-full border border-border/60 bg-card shadow-sm transition-shadow has-[input:focus]:ring-2 has-[input:focus]:ring-primary/15 has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-primary/15"
         role="toolbar"
         aria-label="Search and filter events"
       >
-        {/* Location segment */}
-        <button
-          onClick={() => togglePanel("location")}
-          className={`group relative flex min-w-0 flex-1 items-center gap-2.5 rounded-l-full py-3 pl-5 pr-4 text-left transition-colors focus-visible:z-10 focus-visible:outline-none ${
-            openPanel === "location" ? "bg-secondary" : "hover:bg-secondary/50"
+        {/* Search segment */}
+        <div
+          className={`group relative flex min-w-0 flex-1 items-center gap-2.5 rounded-l-full py-3 pl-5 pr-3 transition-colors ${
+            openPanel === "search" ? "bg-secondary" : "hover:bg-secondary/50"
           }`}
-          aria-expanded={openPanel === "location"}
-          aria-haspopup="listbox"
+          onClick={() => {
+            if (openPanel !== "search") togglePanel("search")
+          }}
         >
-          <LocationIcon className="size-[18px]" />
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Where
-            </div>
-            <div
-              className={`truncate text-[13px] font-medium ${activeLocation ? "text-foreground" : "text-muted-foreground"}`}
-            >
-              {locationLabel}
-            </div>
-          </div>
-          {activeLocation && (
+          <SearchIcon className="size-[18px] shrink-0 text-muted-foreground/50" />
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Search events, cities, venues..."
+            value={searchQuery}
+            onChange={(e) => {
+              onSearchQueryChange(e.target.value)
+              if (openPanel !== "search") setOpenPanel("search")
+            }}
+            onFocus={() => setOpenPanel("search")}
+            onKeyDown={handleInputKeyDown}
+            role="combobox"
+            aria-expanded={openPanel === "search" && suggestions.length > 0}
+            aria-activedescendant={
+              highlightedIndex >= 0
+                ? `suggestion-${highlightedIndex}`
+                : undefined
+            }
+            aria-autocomplete="list"
+            aria-controls="search-suggestions"
+            className="h-full min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+          />
+          {searchQuery && (
             <ClearButton
               onClick={(e) => {
                 e.stopPropagation()
-                onLocationClear()
+                onClearSearch()
+                inputRef.current?.focus()
               }}
-              label="Clear location"
+              label="Clear search"
             />
           )}
-        </button>
+        </div>
 
         <div className="my-2.5 w-px bg-border/50" />
 
@@ -251,111 +300,26 @@ export function DesktopSearchBar({
         </div>
       </div>
 
-      {/* Location / search dropdown panel */}
-      {openPanel === "location" && (
+      {/* Search suggestions dropdown — flat ranked list */}
+      {openPanel === "search" && suggestions.length > 0 && (
         <div
+          id="search-suggestions"
           className="absolute top-full left-0 z-50 mt-2 w-full max-w-md overflow-hidden rounded-2xl border border-border/60 bg-popover shadow-xl shadow-slate-900/8"
           role="listbox"
-          aria-label="Search events and locations"
+          aria-label="Search suggestions"
         >
-          <div className="p-2 pb-0">
-            <input
-              ref={locationInputRef}
-              type="text"
-              placeholder="Search events or cities..."
-              value={locationQuery}
-              onChange={(e) => onLocationQueryChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  if (eventSuggestions.length > 0) {
-                    navigate(`/events/${eventSuggestions[0].id}`)
-                    setOpenPanel(null)
-                  } else if (citySuggestions.length > 0) {
-                    selectLocation(citySuggestions[0])
-                  }
-                }
-              }}
-              className="h-10 w-full rounded-lg bg-secondary/50 px-3 text-sm transition-colors placeholder:text-muted-foreground/40 focus:bg-secondary focus:outline-none"
-            />
-          </div>
-
-          <div className="max-h-[320px] overflow-y-auto p-2">
-            {/* Event results */}
-            {eventSuggestions.length > 0 && (
-              <div>
-                <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Events
-                </div>
-                {eventSuggestions.map((event) => {
-                  const isPast = new Date((event.endDate ?? event.date) + "T23:59:59") < new Date()
-                  return (
-                    <button
-                      key={event.id}
-                      role="option"
-                      aria-selected={false}
-                      onClick={() => {
-                        navigate(`/events/${event.id}`)
-                        setOpenPanel(null)
-                      }}
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors text-foreground hover:bg-secondary"
-                    >
-                      <span className={`size-2 shrink-0 rounded-full ${TYPE_DOTS[event.type] ?? "bg-slate-400"}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className={`truncate text-[13px] font-medium ${isPast ? "text-muted-foreground" : ""}`}>
-                          {event.title}
-                        </div>
-                        <div className="truncate text-[11px] text-muted-foreground">
-                          {event.location} · {formatEventDateRange(event.date, event.endDate)}
-                          {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wider opacity-60">Past</span>}
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Divider between events and cities */}
-            {eventSuggestions.length > 0 && citySuggestions.length > 0 && (
-              <div className="my-1 border-t border-border/40" />
-            )}
-
-            {/* City results */}
-            {citySuggestions.length > 0 && (
-              <div>
-                {locationQuery.trim() && (
-                  <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Cities
-                  </div>
-                )}
-                {citySuggestions.map((city) => (
-                  <button
-                    key={city.name}
-                    role="option"
-                    aria-selected={activeLocation === city.name}
-                    onClick={() => selectLocation(city)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-                      activeLocation === city.name
-                        ? "bg-primary/8 text-primary font-medium"
-                        : "text-foreground hover:bg-secondary"
-                    }`}
-                  >
-                    <LocationIcon className="size-4" />
-                    {city.name}
-                    {activeLocation === city.name && (
-                      <CheckIcon className="ml-auto size-4 text-primary" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* No results */}
-            {eventSuggestions.length === 0 && citySuggestions.length === 0 && locationQuery.trim() && (
-              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                No events or cities found
-              </div>
-            )}
+          <div className="max-h-[400px] overflow-y-auto p-2">
+            {suggestions.map((s, i) => (
+              <SuggestionRow
+                key={`${s.type}-${s.label}-${i}`}
+                suggestion={s}
+                index={i}
+                isHighlighted={i === highlightedIndex}
+                activeLocation={activeLocation}
+                onSelect={handleSuggestionClick}
+                onHover={setHighlightedIndex}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -441,6 +405,102 @@ export function DesktopSearchBar({
         </div>
       )}
     </div>
+  )
+}
+
+function SuggestionIcon({ type }: { type: SearchSuggestion["type"] }) {
+  switch (type) {
+    case "city":
+      return <LocationIcon className="size-4" />
+    case "venue":
+      return <VenueIcon className="size-4 text-muted-foreground/50" />
+    case "organizer":
+      return <UserIcon className="size-4 text-muted-foreground/50" />
+    case "event":
+      return null // events use the type dot instead
+  }
+}
+
+function SuggestionRow({
+  suggestion,
+  index,
+  isHighlighted,
+  activeLocation,
+  onSelect,
+  onHover,
+}: {
+  suggestion: SearchSuggestion
+  index: number
+  isHighlighted: boolean
+  activeLocation: string
+  onSelect: (s: SearchSuggestion) => void
+  onHover: (i: number) => void
+}) {
+  const s = suggestion
+
+  if (s.type === "event" && s.event) {
+    const event = s.event
+    const isPast = new Date((event.endDate ?? event.date) + "T23:59:59") < new Date()
+    return (
+      <button
+        id={`suggestion-${index}`}
+        role="option"
+        aria-selected={isHighlighted}
+        onClick={() => onSelect(s)}
+        onMouseEnter={() => onHover(index)}
+        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors text-foreground ${
+          isHighlighted ? "bg-secondary" : "hover:bg-secondary"
+        }`}
+      >
+        <span className={`size-2 shrink-0 rounded-full ${TYPE_DOTS[event.type] ?? "bg-slate-400"}`} />
+        <div className="min-w-0 flex-1">
+          <div className={`truncate text-[13px] font-medium ${isPast ? "text-muted-foreground" : ""}`}>
+            {event.title}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {event.location} · {formatEventDateRange(event.date, event.endDate)}
+            {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wider opacity-60">Past</span>}
+          </div>
+        </div>
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+          Event
+        </span>
+      </button>
+    )
+  }
+
+  const isActiveCity = s.type === "city" && activeLocation === s.label
+
+  return (
+    <button
+      id={`suggestion-${index}`}
+      role="option"
+      aria-selected={isHighlighted}
+      onClick={() => onSelect(s)}
+      onMouseEnter={() => onHover(index)}
+      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+        isActiveCity
+          ? "bg-primary/8 text-primary font-medium"
+          : isHighlighted
+            ? "bg-secondary text-foreground"
+            : "text-foreground hover:bg-secondary"
+      }`}
+    >
+      <SuggestionIcon type={s.type} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] font-medium">{s.label}</div>
+        {s.sublabel && (
+          <div className="truncate text-[11px] text-muted-foreground">{s.sublabel}</div>
+        )}
+      </div>
+      {isActiveCity ? (
+        <CheckIcon className="ml-auto size-4 shrink-0 text-primary" />
+      ) : (
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+          {s.type === "city" ? "City" : s.type === "venue" ? "Venue" : "Organizer"}
+        </span>
+      )}
+    </button>
   )
 }
 

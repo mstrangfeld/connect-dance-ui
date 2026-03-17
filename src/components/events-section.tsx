@@ -8,6 +8,7 @@ import { MobileEventsFilterPill } from "@/components/mobile-events-filter-pill"
 import { useEventFilters } from "@/hooks/use-event-filters"
 import { useExploreState } from "@/context/explore-state"
 import { formatDateRangeLabel } from "@/lib/events"
+import type { SearchSuggestion } from "@/lib/search-suggestions"
 import type { EventType } from "@/data/mock-events"
 
 const BATCH_SIZE = 12
@@ -29,7 +30,7 @@ export function EventsSection({
   const explore = useExploreState(stateKey)
   const initial = explore.getSnapshot()
 
-  const { filters, actions, filtered, sorted } =
+  const { filters, actions, filtered, sorted, searchBounds } =
     useEventFilters({
       externalActiveTypes,
       onActiveTypesChange,
@@ -106,6 +107,26 @@ export function EventsSection({
     navigate("/events")
   }, [explore, navigate])
 
+  // Compute filter count for badge (dateRange + types + includePast)
+  const filterCount =
+    (filters.dateRange?.from ? 1 : 0) +
+    (filters.activeTypes.size > 0 ? 1 : 0) +
+    (filters.includePast ? 1 : 0)
+
+  const handleSuggestionSelect = useCallback(
+    (suggestion: SearchSuggestion) => {
+      if (suggestion.type === "city" && suggestion.city) {
+        actions.selectLocation(suggestion.city)
+      } else if (
+        (suggestion.type === "venue" || suggestion.type === "organizer") &&
+        suggestion.filterValue
+      ) {
+        actions.setSearchQuery(suggestion.filterValue)
+      }
+    },
+    [actions],
+  )
+
   return (
     <div
       id="events-list"
@@ -119,38 +140,44 @@ export function EventsSection({
         {/* Mobile pill */}
         <div className="md:hidden mx-auto max-w-2xl">
           <MobileEventsFilterPill
-            locationQuery={filters.locationQuery}
-            onLocationQueryChange={actions.setLocationQuery}
-            activeLocation={filters.activeLocation}
-            onLocationSelect={actions.selectLocation}
-            onLocationClear={actions.clearLocation}
+            searchQuery={filters.searchQuery}
+            onSearchQueryChange={actions.setSearchQuery}
+            onSuggestionSelect={handleSuggestionSelect}
+            onClearSearch={actions.clearSearch}
             dateRange={filters.dateRange}
             onDateRangeChange={actions.setDateRange}
             activeTypes={filters.activeTypes}
             onTypeToggle={actions.toggleType}
+            includePast={filters.includePast}
+            onIncludePastChange={actions.setIncludePast}
             onClearAll={actions.clearAll}
             resultCount={filtered.length}
+            filterCount={filterCount}
             embedded={embedded}
             onNavigateToEvents={embedded ? handleNavigateToEvents : undefined}
+            activeLocation={filters.activeLocation}
           />
         </div>
 
         {/* Desktop search bar */}
         <DesktopSearchBar
-          locationQuery={filters.locationQuery}
-          onLocationQueryChange={actions.setLocationQuery}
-          activeLocation={filters.activeLocation}
-          onLocationSelect={actions.selectLocation}
-          onLocationClear={actions.clearLocation}
+          searchQuery={filters.searchQuery}
+          onSearchQueryChange={actions.setSearchQuery}
+          onSuggestionSelect={handleSuggestionSelect}
+          onClearSearch={actions.clearSearch}
           dateRange={filters.dateRange}
           onDateRangeChange={actions.setDateRange}
           activeTypes={filters.activeTypes}
           onTypeToggle={actions.toggleType}
           onTypesReset={() => actions.setActiveTypes(new Set())}
+          includePast={filters.includePast}
+          onIncludePastChange={actions.setIncludePast}
+          filterCount={filterCount}
           embedded={embedded}
           showMap={showMap}
           onToggleMap={() => setShowMap(!showMap)}
           onNavigateToEvents={embedded ? handleNavigateToEvents : undefined}
+          activeLocation={filters.activeLocation}
         />
 
       </div>
@@ -197,14 +224,14 @@ export function EventsSection({
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <h2 className="text-sm font-semibold text-foreground">
                     {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
-                    {showMap && mapBounds && (
-                      <span className="font-normal text-muted-foreground"> in this area</span>
-                    )}
-                    {filters.activeLocation && (
+                    {filters.searchQuery && !filters.activeLocation && (
                       <span className="font-normal text-muted-foreground">
                         {" "}
-                        near {filters.activeLocation}
+                        matching &ldquo;{filters.searchQuery}&rdquo;
                       </span>
+                    )}
+                    {showMap && mapBounds && (
+                      <span className="font-normal text-muted-foreground"> in this area</span>
                     )}
                     {filters.dateRange?.from && (
                       <span className="font-normal text-muted-foreground">
@@ -281,7 +308,7 @@ export function EventsSection({
                 <EventMap
                   events={filtered}
                   searchCenter={filters.searchCenter}
-
+                  searchBounds={searchBounds}
                   activeEventId={activeEventId}
                   onEventSelect={handleEventSelect}
                   onBoundsChange={handleBoundsChange}
@@ -338,6 +365,7 @@ export function EventsSection({
           <EventMap
             events={filtered}
             searchCenter={filters.searchCenter}
+            searchBounds={searchBounds}
             activeEventId={activeEventId}
             onEventSelect={handleEventSelect}
             onBoundsChange={handleBoundsChange}

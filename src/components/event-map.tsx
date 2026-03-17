@@ -45,10 +45,19 @@ function createEventIcon(type: string, isActive: boolean) {
   })
 }
 
-function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
+function MapUpdater({
+  center,
+  zoom,
+  searchBounds,
+}: {
+  center: [number, number]
+  zoom: number
+  searchBounds?: [[number, number], [number, number]]
+}) {
   const map = useMap()
   const prevCenter = useRef(center)
   const prevZoom = useRef(zoom)
+  const prevBounds = useRef(searchBounds)
   const isFirstRender = useRef(true)
 
   useEffect(() => {
@@ -58,10 +67,28 @@ function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }
       return
     }
 
+    // Bounds mode: searchBounds defined, no city selected
+    if (searchBounds && searchBounds !== prevBounds.current) {
+      prevBounds.current = searchBounds
+      const size = map.getSize()
+      const bounds = L.latLngBounds(
+        L.latLng(searchBounds[0][0], searchBounds[0][1]),
+        L.latLng(searchBounds[1][0], searchBounds[1][1]),
+      )
+      if (size.x > 0 && size.y > 0) {
+        map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 12, duration: 0.8 })
+      } else {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 })
+      }
+      return
+    }
+
+    // Point mode: fly to center
     if (
-      prevCenter.current[0] !== center[0] ||
-      prevCenter.current[1] !== center[1] ||
-      prevZoom.current !== zoom
+      !searchBounds &&
+      (prevCenter.current[0] !== center[0] ||
+        prevCenter.current[1] !== center[1] ||
+        prevZoom.current !== zoom)
     ) {
       const size = map.getSize()
       if (size.x > 0 && size.y > 0) {
@@ -71,8 +98,9 @@ function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }
       }
       prevCenter.current = center
       prevZoom.current = zoom
+      prevBounds.current = undefined
     }
-  }, [map, center, zoom])
+  }, [map, center, zoom, searchBounds])
 
   return null
 }
@@ -190,6 +218,7 @@ function MapLegend() {
 interface EventMapProps {
   events: DanceEvent[]
   searchCenter?: [number, number]
+  searchBounds?: [[number, number], [number, number]]
   activeEventId?: string
   onEventSelect?: (eventId: string) => void
   onBoundsChange?: (bounds: MapBounds) => void
@@ -204,6 +233,7 @@ interface EventMapProps {
 export function EventMap({
   events,
   searchCenter,
+  searchBounds,
   activeEventId,
   onEventSelect,
   onBoundsChange,
@@ -246,7 +276,7 @@ export function EventMap({
       maxBoundsViscosity={1.0}
     >
       <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-      <MapUpdater center={filterCenter} zoom={filterZoom} />
+      <MapUpdater center={filterCenter} zoom={filterZoom} searchBounds={searchBounds} />
       {onBoundsChange && <BoundsTracker onBoundsChange={onBoundsChange} onViewChange={onViewChange} />}
 
       {markers.map(({ event, position, icon }) => (
