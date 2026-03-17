@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react"
-import { Link } from "react-router"
 import { Calendar } from "@/components/ui/calendar"
 import { XIcon, LocationIcon, CheckIcon, SearchIcon, MapIcon } from "@/components/icons"
-import { CITIES, RADIUS_OPTIONS, EVENT_TYPE_LABELS } from "@/data/mock-events"
+import { CITIES, EVENT_TYPE_LABELS } from "@/data/mock-events"
 import type { EventType, City } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
 import { formatDateRangeLabel, TYPE_DOTS } from "@/lib/events"
@@ -19,8 +18,6 @@ interface DesktopSearchBarProps {
   activeLocation: string
   onLocationSelect: (city: City) => void
   onLocationClear: () => void
-  radius: number
-  onRadiusChange: (r: number) => void
   dateRange: DateRange | undefined
   onDateRangeChange: (range: DateRange | undefined) => void
   activeTypes: Set<EventType>
@@ -29,6 +26,7 @@ interface DesktopSearchBarProps {
   embedded?: boolean
   showMap?: boolean
   onToggleMap?: () => void
+  onNavigateToEvents?: () => void
 }
 
 export function DesktopSearchBar({
@@ -37,8 +35,6 @@ export function DesktopSearchBar({
   activeLocation,
   onLocationSelect,
   onLocationClear,
-  radius,
-  onRadiusChange,
   dateRange,
   onDateRangeChange,
   activeTypes,
@@ -47,6 +43,7 @@ export function DesktopSearchBar({
   embedded,
   showMap,
   onToggleMap,
+  onNavigateToEvents,
 }: DesktopSearchBarProps) {
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const searchBarRef = useRef<HTMLDivElement>(null)
@@ -121,11 +118,6 @@ export function DesktopSearchBar({
               className={`truncate text-[13px] font-medium ${activeLocation ? "text-foreground" : "text-muted-foreground"}`}
             >
               {locationLabel}
-              {activeLocation && (
-                <span className="ml-1.5 text-muted-foreground">
-                  · {RADIUS_OPTIONS.find((o) => o.value === radius)?.label}
-                </span>
-              )}
             </div>
           </div>
           {activeLocation && (
@@ -224,13 +216,13 @@ export function DesktopSearchBar({
         {/* Search / map toggle */}
         <div className="flex items-center pr-2">
           {embedded ? (
-            <Link
-              to="/events"
+            <button
+              onClick={onNavigateToEvents}
               className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90"
               aria-label="Search all events"
             >
               <SearchIcon />
-            </Link>
+            </button>
           ) : (
             <button
               onClick={onToggleMap}
@@ -288,31 +280,6 @@ export function DesktopSearchBar({
               )}
             </button>
           ))}
-          {activeLocation && (
-            <>
-              <div className="my-2 h-px bg-border/50" />
-              <div className="px-2 pb-1">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
-                  Radius
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {RADIUS_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => onRadiusChange(opt.value)}
-                      className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                        radius === opt.value
-                          ? "bg-foreground text-background"
-                          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
         </div>
       )}
 

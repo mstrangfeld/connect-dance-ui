@@ -2,13 +2,12 @@ import { useState, useMemo, useCallback } from "react"
 import { MOCK_EVENTS } from "@/data/mock-events"
 import type { EventType, City, DanceEvent } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
-import { haversine } from "@/lib/events"
+
 
 export interface EventFilters {
   locationQuery: string
   activeLocation: string
   searchCenter: [number, number] | undefined
-  radius: number
   dateRange: DateRange | undefined
   activeTypes: Set<EventType>
 }
@@ -17,7 +16,6 @@ export interface EventFilterActions {
   setLocationQuery: (q: string) => void
   selectLocation: (city: City) => void
   clearLocation: () => void
-  setRadius: (r: number) => void
   setDateRange: (range: DateRange | undefined) => void
   toggleType: (type: EventType) => void
   setActiveTypes: (types: Set<EventType>) => void
@@ -35,17 +33,18 @@ export interface UseEventFiltersReturn {
 export function useEventFilters(options?: {
   externalActiveTypes?: Set<EventType>
   onActiveTypesChange?: (types: Set<EventType>) => void
+  initialState?: Partial<EventFilters>
 }): UseEventFiltersReturn {
-  const [locationQuery, setLocationQuery] = useState("")
-  const [activeLocation, setActiveLocation] = useState("")
+  const init = options?.initialState
+  const [locationQuery, setLocationQuery] = useState(init?.locationQuery ?? "")
+  const [activeLocation, setActiveLocation] = useState(init?.activeLocation ?? "")
   const [searchCenter, setSearchCenter] = useState<
     [number, number] | undefined
-  >(undefined)
-  const [radius, setRadius] = useState(200)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
+  >(init?.searchCenter)
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(init?.dateRange)
   const [internalActiveTypes, setInternalActiveTypes] = useState<
     Set<EventType>
-  >(new Set())
+  >(init?.activeTypes ?? new Set())
 
   const activeTypes = options?.externalActiveTypes ?? internalActiveTypes
 
@@ -100,10 +99,6 @@ export function useEventFilters(options?: {
     return MOCK_EVENTS.filter((e) => {
       if (activeTypes.size > 0 && !e.categories.some((c) => activeTypes.has(c)))
         return false
-      if (activeLocation && searchCenter) {
-        const dist = haversine(searchCenter[0], searchCenter[1], e.lat, e.lng)
-        if (dist > radius) return false
-      }
       if (dateRange?.from) {
         const eventDate = new Date(e.date + "T00:00:00")
         const from = new Date(dateRange.from)
@@ -114,7 +109,7 @@ export function useEventFilters(options?: {
       }
       return true
     })
-  }, [activeTypes, activeLocation, searchCenter, radius, dateRange])
+  }, [activeTypes, dateRange])
 
   const sorted = useMemo(
     () => [...filtered].sort((a, b) => a.date.localeCompare(b.date)),
@@ -129,7 +124,6 @@ export function useEventFilters(options?: {
       locationQuery,
       activeLocation,
       searchCenter,
-      radius,
       dateRange,
       activeTypes,
     },
@@ -137,7 +131,6 @@ export function useEventFilters(options?: {
       setLocationQuery: handleLocationQueryChange,
       selectLocation,
       clearLocation,
-      setRadius,
       setDateRange,
       toggleType,
       setActiveTypes,

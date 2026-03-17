@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from "react"
 import { createPortal } from "react-dom"
-import { Link } from "react-router"
 import { Calendar } from "@/components/ui/calendar"
 import { XIcon, ChevronIcon, LocationIcon, CheckIcon } from "@/components/icons"
-import { EVENT_TYPE_LABELS, RADIUS_OPTIONS, CITIES } from "@/data/mock-events"
+import { EVENT_TYPE_LABELS, CITIES } from "@/data/mock-events"
 import type { EventType, City } from "@/data/mock-events"
 import type { DateRange } from "react-day-picker"
 import { formatDateRangeLabel, TYPE_DOTS } from "@/lib/events"
@@ -20,8 +19,6 @@ export interface MobileEventsFilterPillProps {
   activeLocation: string
   onLocationSelect: (city: City) => void
   onLocationClear: () => void
-  radius: number
-  onRadiusChange: (r: number) => void
   dateRange: DateRange | undefined
   onDateRangeChange: (range: DateRange | undefined) => void
   activeTypes: Set<EventType>
@@ -29,6 +26,7 @@ export interface MobileEventsFilterPillProps {
   onClearAll: () => void
   resultCount: number
   embedded?: boolean
+  onNavigateToEvents?: () => void
 }
 
 export function MobileEventsFilterPill({
@@ -37,8 +35,6 @@ export function MobileEventsFilterPill({
   activeLocation,
   onLocationSelect,
   onLocationClear,
-  radius,
-  onRadiusChange,
   dateRange,
   onDateRangeChange,
   activeTypes,
@@ -46,6 +42,7 @@ export function MobileEventsFilterPill({
   onClearAll,
   resultCount,
   embedded,
+  onNavigateToEvents,
 }: MobileEventsFilterPillProps) {
   const [panelOpen, setPanelOpen] = useState(false)
   const [animState, setAnimState] = useState<"closed" | "entering" | "open" | "exiting">("closed")
@@ -154,10 +151,10 @@ export function MobileEventsFilterPill({
           <path d="M21 21l-4.35-4.35" />
         </svg>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[13px] font-semibold leading-none text-foreground">
+          <span className="text-[13px] font-bold leading-none text-foreground">
             {activeLocation || "Anywhere"}
           </span>
-          <span className="truncate text-[11px] leading-none text-muted-foreground">
+          <span className="truncate text-[11px] leading-none text-slate-500 dark:text-slate-400">
             {dateLabel} · {typeLabel}
           </span>
         </div>
@@ -235,15 +232,6 @@ export function MobileEventsFilterPill({
                       className={`mt-0.5 text-[15px] font-medium ${activeLocation ? "text-foreground" : "text-muted-foreground"}`}
                     >
                       {activeLocation || "Anywhere"}
-                      {activeLocation && (
-                        <span className="ml-2 text-sm font-normal text-muted-foreground">
-                          ·{" "}
-                          {
-                            RADIUS_OPTIONS.find((o) => o.value === radius)
-                              ?.label
-                          }
-                        </span>
-                      )}
                     </div>
                   </div>
                   <ChevronIcon expanded={expandedSection === "location"} />
@@ -284,29 +272,6 @@ export function MobileEventsFilterPill({
                         </button>
                       ))}
                     </div>
-                    {activeLocation && (
-                      <>
-                        <div className="my-3 h-px bg-border/50" />
-                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Radius
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {RADIUS_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              onClick={() => onRadiusChange(opt.value)}
-                              className={`rounded-xl px-4 py-2 text-[13px] font-medium transition-colors ${
-                                radius === opt.value
-                                  ? "bg-foreground text-background"
-                                  : "border border-border/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
                   </div>
                 )}
               </div>
@@ -421,12 +386,12 @@ export function MobileEventsFilterPill({
             {/* Footer */}
             <div className="shrink-0 border-t border-border/50 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {embedded ? (
-                <Link
-                  to="/events"
+                <button
+                  onClick={onNavigateToEvents}
                   className="flex w-full items-center justify-center rounded-2xl bg-primary py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 active:opacity-80"
                 >
                   Search events
-                </Link>
+                </button>
               ) : (
                 <button
                   onClick={closePanel}

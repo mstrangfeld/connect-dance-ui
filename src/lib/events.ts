@@ -37,31 +37,31 @@ export const TYPE_ACCENTS: Record<
   party: {
     stripe: "bg-violet-400",
     badge:
-      "bg-violet-400/12 text-violet-600 dark:bg-violet-400/20 dark:text-violet-400",
+      "bg-violet-400/15 text-violet-700 dark:bg-violet-400/20 dark:text-violet-400",
     dot: "bg-violet-400",
   },
   intensive: {
     stripe: "bg-orange-400",
     badge:
-      "bg-orange-400/12 text-orange-600 dark:bg-orange-400/20 dark:text-orange-400",
+      "bg-orange-400/15 text-orange-700 dark:bg-orange-400/20 dark:text-orange-400",
     dot: "bg-orange-400",
   },
   workshop: {
     stripe: "bg-yellow-400",
     badge:
-      "bg-yellow-400/15 text-yellow-600 dark:bg-yellow-400/20 dark:text-yellow-400",
+      "bg-yellow-400/20 text-yellow-700 dark:bg-yellow-400/20 dark:text-yellow-400",
     dot: "bg-yellow-400",
   },
   class: {
     stripe: "bg-emerald-400",
     badge:
-      "bg-emerald-400/12 text-emerald-600 dark:bg-emerald-400/20 dark:text-emerald-400",
+      "bg-emerald-400/15 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-400",
     dot: "bg-emerald-400",
   },
   festival: {
     stripe: "bg-sky-400",
     badge:
-      "bg-sky-400/12 text-sky-600 dark:bg-sky-400/20 dark:text-sky-400",
+      "bg-sky-400/15 text-sky-700 dark:bg-sky-400/20 dark:text-sky-400",
     dot: "bg-sky-400",
   },
 }

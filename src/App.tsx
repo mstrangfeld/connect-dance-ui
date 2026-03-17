@@ -11,10 +11,13 @@ import { ListEventPage } from "@/pages/list-event"
 import { MyEventsPage } from "@/pages/my-events"
 import { AccountPage } from "@/pages/account"
 import { AuthProvider } from "@/context/auth"
+import { ExploreStateProvider } from "@/context/explore-state"
 
 function ScrollToTop() {
   const { pathname } = useLocation()
   useEffect(() => {
+    // Don't reset scroll for /events — it restores its own scroll position
+    if (pathname === "/events") return
     window.scrollTo(0, 0)
   }, [pathname])
   return null
@@ -46,9 +49,11 @@ function AppLayout() {
 export function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename="/connect-dance-ui">
-        <AppLayout />
-      </BrowserRouter>
+      <ExploreStateProvider>
+        <BrowserRouter basename="/connect-dance-ui">
+          <AppLayout />
+        </BrowserRouter>
+      </ExploreStateProvider>
     </AuthProvider>
   )
 }

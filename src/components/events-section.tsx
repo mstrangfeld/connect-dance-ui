@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from "react"
-import { Link } from "react-router"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import { useNavigate } from "react-router"
 import { Button } from "@/components/ui/button"
 import { EventCard } from "@/components/event-card"
-import { EventMap } from "@/components/event-map"
+import { EventMap, type MapBounds, type MapViewState } from "@/components/event-map"
 import { DesktopSearchBar } from "@/components/desktop-search-bar"
 import { MobileEventsFilterPill } from "@/components/mobile-events-filter-pill"
 import { useEventFilters } from "@/hooks/use-event-filters"
+import { useExploreState } from "@/context/explore-state"
 import { formatDateRangeLabel } from "@/lib/events"
 import type { EventType } from "@/data/mock-events"
 
@@ -13,26 +14,63 @@ const BATCH_SIZE = 12
 
 interface EventsSectionProps {
   embedded?: boolean
+  stateKey?: string
   activeTypes?: Set<EventType>
   onActiveTypesChange?: (types: Set<EventType>) => void
 }
 
 export function EventsSection({
   embedded,
+  stateKey = "events",
   activeTypes: externalActiveTypes,
   onActiveTypesChange,
 }: EventsSectionProps) {
+  const navigate = useNavigate()
+  const explore = useExploreState(stateKey)
+  const initial = explore.getSnapshot()
+
   const { filters, actions, filtered, sorted } =
     useEventFilters({
       externalActiveTypes,
       onActiveTypesChange,
+      initialState: initial.filters,
     })
 
   const [visibleCount, setVisibleCount] = useState(embedded ? 6 : BATCH_SIZE)
   const [showMap, setShowMap] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 1024,
   )
-  const [activeEventId, setActiveEventId] = useState<string | undefined>()
+  const [activeEventId, setActiveEventId] = useState<string | undefined>(initial.activeEventId)
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(initial.mapBounds)
+
+  // Sync filter changes back to context
+  useEffect(() => {
+    explore.updateFilters(filters)
+  })
+
+  useEffect(() => {
+    explore.setActiveEventId(activeEventId)
+  }, [activeEventId, explore])
+
+  const handleBoundsChange = useCallback((bounds: MapBounds) => {
+    setMapBounds(bounds)
+    explore.setMapBounds(bounds)
+  }, [explore])
+
+  const handleViewChange = useCallback((view: MapViewState) => {
+    explore.updateMapView(view)
+  }, [explore])
+
+  const visibleInBounds = useMemo(() => {
+    if (!showMap || !mapBounds) return sorted
+    return sorted.filter(
+      (e) =>
+        e.lat >= mapBounds.south &&
+        e.lat <= mapBounds.north &&
+        e.lng >= mapBounds.west &&
+        e.lng <= mapBounds.east,
+    )
+  }, [sorted, mapBounds, showMap])
 
   const sentinelRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -53,14 +91,20 @@ export function EventsSection({
     return () => observer.disconnect()
   }, [])
 
-  const visible = sorted.slice(0, visibleCount)
-  const hasMore = visibleCount < sorted.length
+  const displayEvents = showMap ? visibleInBounds : sorted
+  const visible = displayEvents.slice(0, visibleCount)
+  const hasMore = visibleCount < displayEvents.length
 
   const handleEventSelect = useCallback((eventId: string) => {
     setActiveEventId(eventId)
     const card = document.getElementById(`event-${eventId}`)
     if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" })
   }, [])
+
+  const handleNavigateToEvents = useCallback(() => {
+    explore.copyTo("events")
+    navigate("/events")
+  }, [explore, navigate])
 
   return (
     <div
@@ -80,8 +124,6 @@ export function EventsSection({
             activeLocation={filters.activeLocation}
             onLocationSelect={actions.selectLocation}
             onLocationClear={actions.clearLocation}
-            radius={filters.radius}
-            onRadiusChange={actions.setRadius}
             dateRange={filters.dateRange}
             onDateRangeChange={actions.setDateRange}
             activeTypes={filters.activeTypes}
@@ -89,6 +131,7 @@ export function EventsSection({
             onClearAll={actions.clearAll}
             resultCount={filtered.length}
             embedded={embedded}
+            onNavigateToEvents={embedded ? handleNavigateToEvents : undefined}
           />
         </div>
 
@@ -99,8 +142,6 @@ export function EventsSection({
           activeLocation={filters.activeLocation}
           onLocationSelect={actions.selectLocation}
           onLocationClear={actions.clearLocation}
-          radius={filters.radius}
-          onRadiusChange={actions.setRadius}
           dateRange={filters.dateRange}
           onDateRangeChange={actions.setDateRange}
           activeTypes={filters.activeTypes}
@@ -109,6 +150,7 @@ export function EventsSection({
           embedded={embedded}
           showMap={showMap}
           onToggleMap={() => setShowMap(!showMap)}
+          onNavigateToEvents={embedded ? handleNavigateToEvents : undefined}
         />
 
       </div>
@@ -153,7 +195,10 @@ export function EventsSection({
             ) : (
               <div className="px-5 py-4">
                 <h2 className="mb-4 text-sm font-semibold text-foreground">
-                  {filtered.length} event{filtered.length !== 1 ? "s" : ""}
+                  {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
+                  {showMap && mapBounds && (
+                    <span className="font-normal text-muted-foreground"> in this area</span>
+                  )}
                   {filters.activeLocation && (
                     <span className="font-normal text-muted-foreground">
                       {" "}
@@ -187,15 +232,22 @@ export function EventsSection({
                     <div className="size-5 animate-spin rounded-full border-2 border-border border-t-primary" />
                   </div>
                 )}
-                {!embedded && !hasMore && sorted.length > 0 && (
+                {!embedded && !hasMore && displayEvents.length > 0 && (
                   <p className="py-8 text-center text-xs text-muted-foreground">
-                    All {sorted.length} events shown
+                    All {displayEvents.length} events shown
                   </p>
                 )}
-                {embedded && sorted.length > 6 && (
+                {embedded && displayEvents.length > 6 && (
                   <div className="flex justify-center py-8">
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to="/events">View all {sorted.length} events</Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        explore.copyTo("events")
+                        navigate("/events")
+                      }}
+                    >
+                      View all {displayEvents.length} events
                     </Button>
                   </div>
                 )}
@@ -210,9 +262,13 @@ export function EventsSection({
                 <EventMap
                   events={filtered}
                   searchCenter={filters.searchCenter}
-                  radiusKm={filters.radius}
+
                   activeEventId={activeEventId}
                   onEventSelect={handleEventSelect}
+                  onBoundsChange={handleBoundsChange}
+                  onViewChange={handleViewChange}
+                  initialCenter={initial.mapView.center}
+                  initialZoom={initial.mapView.zoom}
                 />
               </div>
             </div>
@@ -266,6 +322,10 @@ export function EventsSection({
             radiusKm={filters.radius}
             activeEventId={activeEventId}
             onEventSelect={handleEventSelect}
+            onBoundsChange={handleBoundsChange}
+            onViewChange={handleViewChange}
+            initialCenter={initial.mapView.center}
+            initialZoom={initial.mapView.zoom}
           />
         </div>
       )}

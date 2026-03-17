@@ -150,24 +150,19 @@ export function MobileBottomNav() {
     pathname === path || (path !== "/events" && pathname.startsWith(path))
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background/95 backdrop-blur-xl md:hidden">
-      <div className="flex items-center justify-around px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background md:hidden">
+      <div className="flex items-center justify-around px-2 pt-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {/* Explore */}
         <Link
           to="/events"
-          className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+          className={`relative flex flex-col items-center gap-1 min-w-[72px] py-2 transition-colors ${
             isActive("/events") ? "text-primary" : "text-muted-foreground"
           }`}
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            className="size-6"
-            stroke="currentColor"
-            strokeWidth={isActive("/events") ? 2 : 1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
+          {isActive("/events") && (
+            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-8 rounded-full bg-primary" />
+          )}
+          <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
@@ -177,33 +172,31 @@ export function MobileBottomNav() {
         {/* My Events */}
         <Link
           to="/my-events"
-          className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+          className={`relative flex flex-col items-center gap-1 min-w-[72px] py-2 transition-colors ${
             isActive("/my-events") ? "text-primary" : "text-muted-foreground"
           }`}
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            className="size-6"
-            stroke="currentColor"
-            strokeWidth={isActive("/my-events") ? 2 : 1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
+          {isActive("/my-events") && (
+            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-8 rounded-full bg-primary" />
+          )}
+          <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" />
             <path d="M8 2v4M16 2v4M3 10h18" />
           </svg>
           <span className="text-[10px] font-medium">My Events</span>
         </Link>
 
-        {/* Profile / Sign in */}
+        {/* Account / Sign in */}
         {isLoggedIn ? (
           <Link
             to="/account"
-            className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+            className={`relative flex flex-col items-center gap-1 min-w-[72px] py-2 transition-colors ${
               isActive("/account") ? "text-primary" : "text-muted-foreground"
             }`}
           >
+            {isActive("/account") && (
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-8 rounded-full bg-primary" />
+            )}
             {currentUser?.avatar ? (
               <img
                 src={currentUser.avatar}
@@ -211,15 +204,7 @@ export function MobileBottomNav() {
                 className={`size-6 rounded-full object-cover ring-1 ${isActive("/account") ? "ring-primary" : "ring-border"}`}
               />
             ) : (
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="size-6"
-                stroke="currentColor"
-                strokeWidth={isActive("/account") ? 2 : 1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="8" r="4" />
                 <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
               </svg>
@@ -229,23 +214,18 @@ export function MobileBottomNav() {
         ) : (
           <Link
             to="/sign-in"
-            className={`flex flex-col items-center gap-1 min-w-[72px] py-1 transition-colors ${
+            className={`relative flex flex-col items-center gap-1 min-w-[72px] py-2 transition-colors ${
               isActive("/sign-in") ? "text-primary" : "text-muted-foreground"
             }`}
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="size-6"
-              stroke="currentColor"
-              strokeWidth={isActive("/sign-in") ? 2 : 1.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            {isActive("/sign-in") && (
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-8 rounded-full bg-primary" />
+            )}
+            <svg viewBox="0 0 24 24" fill="none" className="size-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="8" r="4" />
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
             </svg>
-            <span className="text-[10px] font-medium">Sign in</span>
+            <span className="text-[10px] font-medium">Account</span>
           </Link>
         )}
       </div>

@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { EventsSection } from "@/components/events-section"
-import { EventMap } from "@/components/event-map"
+import { EventMap, type MapBounds, type MapViewState } from "@/components/event-map"
 import { EventCard } from "@/components/event-card"
 import { MobileEventsFilterPill } from "@/components/mobile-events-filter-pill"
 import { useEventFilters } from "@/hooks/use-event-filters"
+import { useExploreState } from "@/context/explore-state"
+import type { City } from "@/data/mock-events"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -31,9 +33,64 @@ const DEFAULT_THEME_COLOR = "#f9f9f8"
 //   z 50  Bottom nav (rendered by App)
 // ---------------------------------------------------------------------------
 
+function isInBounds(lat: number, lng: number, bounds: MapBounds) {
+  return (
+    lat >= bounds.south &&
+    lat <= bounds.north &&
+    lng >= bounds.west &&
+    lng <= bounds.east
+  )
+}
+
 function MobileEventsView() {
-  const { filters, actions, filtered } = useEventFilters()
-  const [activeEventId, setActiveEventId] = useState<string | undefined>()
+  const explore = useExploreState()
+
+  // Hydrate local state from the persistent context
+  const initial = explore.getSnapshot()
+
+  const { filters, actions, filtered } = useEventFilters({
+    initialState: initial.filters,
+  })
+  const [activeEventId, setActiveEventId] = useState<string | undefined>(initial.activeEventId)
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(initial.mapBounds)
+
+  // Sync filter changes back to context (on every render is fine — ref-based, no re-render)
+  useEffect(() => {
+    explore.updateFilters(filters)
+  })
+
+  useEffect(() => {
+    explore.setActiveEventId(activeEventId)
+  }, [activeEventId, explore])
+
+  // Save scroll position on unmount & restore on mount
+  useEffect(() => {
+    const savedY = explore.getSnapshot().scrollY
+    if (savedY > 0) {
+      // Defer to let the DOM render first
+      requestAnimationFrame(() => {
+        window.scrollTo(0, savedY)
+      })
+    }
+    return () => {
+      explore.saveScrollY(window.scrollY)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleBoundsChange = useCallback((bounds: MapBounds) => {
+    setMapBounds(bounds)
+    explore.setMapBounds(bounds)
+  }, [explore])
+
+  const handleViewChange = useCallback((view: MapViewState) => {
+    explore.updateMapView(view)
+  }, [explore])
+
+  const visibleEvents = useMemo(() => {
+    if (!mapBounds) return filtered
+    return filtered.filter((e) => isInBounds(e.lat, e.lng, mapBounds))
+  }, [filtered, mapBounds])
 
   // Set theme-color to map tile bg so iOS status bar blends with the map
   useEffect(() => {
@@ -88,6 +145,21 @@ function MobileEventsView() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
+  // Wrap actions to also sync to context
+  const handleSelectLocation = useCallback((city: City) => {
+    actions.selectLocation(city)
+    explore.selectLocation(city)
+  }, [actions, explore])
+
+  const handleClearLocation = useCallback(() => {
+    actions.clearLocation()
+    explore.clearLocation()
+  }, [actions, explore])
+
+  const handleClearAll = useCallback(() => {
+    actions.clearAll()
+    explore.clearAll()
+  }, [actions, explore])
 
   return (
     <>
@@ -95,10 +167,13 @@ function MobileEventsView() {
       <div className="fixed top-0 left-0 w-full md:hidden" style={{ zIndex: 10, height: "100lvh" }}>
         <EventMap
           events={filtered}
-          radiusKm={filters.radius}
           searchCenter={filters.searchCenter}
           activeEventId={activeEventId}
           onEventSelect={setActiveEventId}
+          onBoundsChange={handleBoundsChange}
+          onViewChange={handleViewChange}
+          initialCenter={initial.mapView.center}
+          initialZoom={initial.mapView.zoom}
         />
       </div>
 
@@ -133,26 +208,32 @@ function MobileEventsView() {
 
         <div className="flex items-center justify-between px-4 py-2">
           <p className="text-[13px] font-semibold">
-            {filtered.length} event{filtered.length !== 1 ? "s" : ""}
+            {visibleEvents.length} event{visibleEvents.length !== 1 ? "s" : ""}{" "}
+            <span className="font-normal text-muted-foreground">in this area</span>
           </p>
         </div>
 
         <div className="px-4 pb-6">
-          {filtered.length === 0 ? (
+          {visibleEvents.length === 0 ? (
             <div className="py-16 text-center">
               <p className="text-sm text-muted-foreground">
-                No events match your filters.
+                No events in this area.
               </p>
-              <button
-                onClick={actions.clearAll}
-                className="mt-3 text-[13px] font-medium text-primary"
-              >
-                Clear filters
-              </button>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Zoom out or pan the map to see more events.
+              </p>
+              {(filters.activeTypes.size > 0 || filters.activeLocation || filters.dateRange?.from) && (
+                <button
+                  onClick={handleClearAll}
+                  className="mt-3 text-[13px] font-medium text-primary"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((event) => (
+              {visibleEvents.map((event) => (
                 <div
                   key={event.id}
                   onClick={() => setActiveEventId(event.id)}
@@ -186,18 +267,25 @@ function MobileEventsView() {
         <div className="relative mx-4 mt-3 pointer-events-auto">
           <MobileEventsFilterPill
             locationQuery={filters.locationQuery}
-            onLocationQueryChange={actions.setLocationQuery}
+            onLocationQueryChange={(q) => {
+              actions.setLocationQuery(q)
+              explore.updateFilters({ locationQuery: q })
+            }}
             activeLocation={filters.activeLocation}
-            onLocationSelect={actions.selectLocation}
-            onLocationClear={actions.clearLocation}
-            radius={filters.radius}
-            onRadiusChange={actions.setRadius}
+            onLocationSelect={handleSelectLocation}
+            onLocationClear={handleClearLocation}
             dateRange={filters.dateRange}
-            onDateRangeChange={actions.setDateRange}
+            onDateRangeChange={(range) => {
+              actions.setDateRange(range)
+              explore.updateFilters({ dateRange: range })
+            }}
             activeTypes={filters.activeTypes}
-            onTypeToggle={actions.toggleType}
-            onClearAll={actions.clearAll}
-            resultCount={filtered.length}
+            onTypeToggle={(type) => {
+              actions.toggleType(type)
+              explore.toggleType(type)
+            }}
+            onClearAll={handleClearAll}
+            resultCount={visibleEvents.length}
           />
         </div>
       </div>
