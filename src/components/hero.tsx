@@ -67,7 +67,7 @@ export function Hero({ activeTypes, onActiveTypesChange }: HeroProps) {
 
   return (
     <section>
-      <div className="mx-auto max-w-3xl px-6 py-10 text-center sm:py-12">
+      <div className="mx-auto max-w-3xl px-6 py-8 text-center sm:py-10">
         <h1 className="text-[1.85rem] font-bold leading-tight tracking-tight sm:text-[2.4rem]">
           Your West Coast Swing Community.
         </h1>

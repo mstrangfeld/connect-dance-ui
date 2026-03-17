@@ -117,14 +117,16 @@ export function EventsSection({
     (suggestion: SearchSuggestion) => {
       if (suggestion.type === "city" && suggestion.city) {
         actions.selectLocation(suggestion.city)
+        explore.selectLocation(suggestion.city)
       } else if (
         (suggestion.type === "venue" || suggestion.type === "organizer") &&
         suggestion.filterValue
       ) {
         actions.setSearchQuery(suggestion.filterValue)
+        explore.updateFilters({ searchQuery: suggestion.filterValue })
       }
     },
-    [actions],
+    [actions, explore],
   )
 
   return (

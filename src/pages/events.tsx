@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { EventsSection } from "@/components/events-section"
 import { EventMap, type MapBounds, type MapViewState } from "@/components/event-map"
 import { EventCard } from "@/components/event-card"
+import { CreateEventCTA } from "@/components/create-event-cta"
 import { MobileEventsFilterPill } from "@/components/mobile-events-filter-pill"
 import { useEventFilters } from "@/hooks/use-event-filters"
 import { useExploreState } from "@/context/explore-state"
@@ -283,6 +284,7 @@ function MobileEventsView() {
                   />
                 </div>
               ))}
+              <CreateEventCTA />
             </div>
           )}
         </div>

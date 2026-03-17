@@ -149,7 +149,8 @@ export function MobileEventsFilterPill({
     }
     onSuggestionSelect(suggestion)
     setShowSuggestions(false)
-  }, [navigate, onSuggestionSelect])
+    if (embedded && onNavigateToEvents) onNavigateToEvents()
+  }, [navigate, onSuggestionSelect, embedded, onNavigateToEvents])
 
   const hasActiveFilters = filterCount > 0 || searchQuery.trim() !== ""
 
@@ -175,6 +176,7 @@ export function MobileEventsFilterPill({
                 if (e.key === "Enter") {
                   setShowSuggestions(false)
                   inputRef.current?.blur()
+                  if (embedded && onNavigateToEvents) onNavigateToEvents()
                 }
                 return
               }
